@@ -43,6 +43,7 @@ type Comment = {
 type UploadRow = {
   processed_video_url: string
   parent_attempt_id: string | null
+  created_at: string
   skills: {
     name: string
     community: string

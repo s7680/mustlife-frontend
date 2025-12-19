@@ -777,29 +777,29 @@ export default function Home() {
     })
   }
   async function deleteAttempt(attemptId: string) {
-  if (!user) return
+    if (!user) return
 
-  const ok = confirm('Delete this video?')
-  if (!ok) return
+    const ok = confirm('Delete this video?')
+    if (!ok) return
 
-  const { error } = await supabase
-    .from('attempts')
-    .delete()
-    .eq('id', attemptId)
-    .eq('user_id', user.id) // 🔐 ownership enforced
+    const { error } = await supabase
+      .from('attempts')
+      .delete()
+      .eq('id', attemptId)
+      .eq('user_id', user.id) // 🔐 ownership enforced
 
-  if (error) {
-    alert(error.message)
-    return
+    if (error) {
+      alert(error.message)
+      return
+    }
+
+    // UI cleanup
+    setFeed(prev => prev.filter(a => a.id !== attemptId))
+    setUserUploads(prev =>
+      prev.filter(v => v.url !== activeProfileAttempt?.processed_video_url)
+    )
+    setActiveProfileAttempt(null)
   }
-
-  // UI cleanup
-  setFeed(prev => prev.filter(a => a.id !== attemptId))
-  setUserUploads(prev =>
-    prev.filter(v => v.url !== activeProfileAttempt?.processed_video_url)
-  )
-  setActiveProfileAttempt(null)
-}
   // ===== RE-ATTEMPT UPLOAD HANDLER =====
   async function handleReAttemptUpload() {
     console.log('Re-attempt clicked')

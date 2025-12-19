@@ -282,7 +282,7 @@ export default function Home() {
       .from('profiles')
       .select('avatar_url, bio, display_name, public_id')
       .eq('id', profileUserId)
-      .single()
+      .single<Profile>() 
       .then(({ data }) => {
         if (!data) return
 

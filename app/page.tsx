@@ -281,7 +281,7 @@ export default function Home() {
       .from('profiles')
       .select('avatar_url, bio, display_name, public_id')
       .eq('id', profileUserId)
-      .single<Profile>()
+      .single()
       .then(({ data }) => {
         if (!data) return
         if (data.avatar_url) setProfilePicUrl(data.avatar_url)

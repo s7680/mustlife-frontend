@@ -38,6 +38,12 @@ type Comment = {
   username?: string
   avatar_url?: string | null
   comment_likes?: { user_id: string }[]
+  profiles?: {
+    id: string
+    display_name: string | null
+    username: string | null
+    avatar_url: string | null
+  }
 }
 
 type UploadRow = {
@@ -141,10 +147,7 @@ export default function Home() {
 
   // ===== PROFILE STATE (ADDED) =====
 
-  const previousAttempt =
-    activeProfileAttempt?.parent_attempt_id
-      ? feed.find(a => a.id === activeProfileAttempt.parent_attempt_id) || null
-      : null
+
 
   /* 🔹 AUTO-FETCH COMMENTS WHEN A VIDEO OPENS */
   useEffect(() => {
@@ -179,6 +182,10 @@ export default function Home() {
   const [isReAttempt, setIsReAttempt] = useState(false)
   const [originalAttempt, setOriginalAttempt] = useState<Attempt | null>(null)
   const [reAttemptFile, setReAttemptFile] = useState<File | null>(null)
+  const previousAttempt =
+    activeProfileAttempt?.parent_attempt_id
+      ? originalAttempt
+      : null
 
   const [userUploads, setUserUploads] = useState<
     { community: string; skill: string; url: string; created_at: string }[]
@@ -282,7 +289,7 @@ export default function Home() {
       .from('profiles')
       .select('avatar_url, bio, display_name, public_id')
       .eq('id', profileUserId)
-      .single<Profile>() 
+      .single<Profile>()
       .then(({ data }) => {
         if (!data) return
 
@@ -349,7 +356,7 @@ export default function Home() {
   async function fetchFeed(skillId?: string) {
     let q = supabase
       .from('attempts')
-      .select('id, user_id, processed_video_url, processing_status, skill_id, created_at')
+      .select('id, user_id, processed_video_url, processing_status, skill_id, parent_attempt_id, created_at')
       .eq('processing_status', 'done')          // ✅ ONLY finished
       .not('processed_video_url', 'is', null)   // ✅ must exist
       .order('created_at', { ascending: false })
@@ -445,9 +452,17 @@ export default function Home() {
   }
   async function fetchComments(attemptId: string) {
     const res = await supabase
-      .from('comments')
-      .select('*')
-      .eq('attempt_id', attemptId)
+  .from('comments')
+  .select(`
+    *,
+    profiles (
+      id,
+      display_name,
+      username,
+      avatar_url
+    )
+  `)
+  .eq('attempt_id', attemptId)
 
     console.log('FETCH COMMENTS RAW RESULT:', res)
 
@@ -831,12 +846,16 @@ export default function Home() {
     }
 
     try {
+      setUploading(true)
+      setUploadProgress(0)
       const filePath = `${user.id}/reattempt-${Date.now()}-${reAttemptFile.name}`
 
       // 1️⃣ Upload new video
       const { error: uploadErr } = await supabase.storage
         .from('raw_videos')
         .upload(filePath, reAttemptFile)
+
+      setUploadProgress(100)
 
       if (uploadErr) throw uploadErr
 
@@ -863,19 +882,23 @@ export default function Home() {
       setReAttemptFile(null)
       setOriginalAttempt(null)
       setActiveProfileAttempt(null)
-      setComments({})
+
 
       // 5️⃣ Refresh
       fetchFeed()
       fetchUserUploads()
+      setUploading(false)
 
       alert('Re-attempt uploaded successfully')
 
     } catch (err: any) {
+      setUploading(false)
+      setUploadProgress(0)
       console.error(err)
       alert(err.message || 'Re-attempt upload failed')
     }
   }
+
   /* ================= LOGIN PAGE ================= */
 
   if (!user) {
@@ -1163,7 +1186,13 @@ export default function Home() {
       {activeProfileAttempt && !showProfile && (
         <div className="max-w-6xl mx-auto p-6 space-y-4">
 
-          <div className="grid grid-cols-[2fr_1fr] gap-4">
+          <div
+            className={
+              previousAttempt
+                ? 'flex flex-col gap-4'
+                : 'grid grid-cols-[2fr_1fr] gap-4'
+            }
+          >
 
             {/* ================= LEFT COLUMN — VIDEOS ================= */}
             <div className="space-y-3">
@@ -1176,30 +1205,64 @@ export default function Home() {
               </div>
 
               {/* PREVIOUS ATTEMPT (OPTIONAL) */}
-              {previousAttempt && (
+              {previousAttempt ? (
+                <div className="grid grid-cols-2 gap-2">
+
+                  {/* BEFORE */}
+                  <div>
+                    <div className="text-xs text-gray-500 mb-1">Before</div>
+                    <video
+                      src={previousAttempt.processed_video_url!}
+                      controls
+                      className="w-full max-h-[70vh] rounded bg-black object-contain"
+                    />
+                  </div>
+
+                  {/* AFTER */}
+                  <div>
+                    <div className="text-xs text-gray-500 mb-1">After</div>
+                    <video
+                      src={activeProfileAttempt.processed_video_url!}
+                      controls
+                      className="w-full max-h-[70vh] rounded bg-black object-contain"
+                      onLoadedMetadata={e => {
+                        const video = e.currentTarget
+                        setVideoMeta(prev => ({
+                          ...prev,
+                          [activeProfileAttempt.id]: {
+                            portrait: video.videoHeight > video.videoWidth,
+                            duration: video.duration,
+                          },
+                        }))
+                      }}
+                    />
+
+
+
+                  </div>
+
+                </div>
+              ) : (
+                /* SINGLE VIDEO VIEW */
                 <video
-                  src={previousAttempt.processed_video_url!}
+                  src={activeProfileAttempt.processed_video_url!}
                   controls
-                  className="w-full max-h-[30vh] rounded bg-black object-contain"
+                  className="w-full max-h-[70vh] rounded bg-black object-contain"
+                  onLoadedMetadata={e => {
+                    const video = e.currentTarget
+                    setVideoMeta(prev => ({
+                      ...prev,
+                      [activeProfileAttempt.id]: {
+                        portrait: video.videoHeight > video.videoWidth,
+                        duration: video.duration,
+                      },
+                    }))
+                  }}
                 />
               )}
 
               {/* ACTIVE ATTEMPT */}
-              <video
-                src={activeProfileAttempt.processed_video_url!}
-                controls
-                className="w-full max-h-[70vh] rounded bg-black object-contain"
-                onLoadedMetadata={e => {
-                  const video = e.currentTarget
-                  setVideoMeta(prev => ({
-                    ...prev,
-                    [activeProfileAttempt.id]: {
-                      portrait: video.videoHeight > video.videoWidth,
-                      duration: video.duration,
-                    },
-                  }))
-                }}
-              />
+
               {activeProfileAttempt.user_id === user.id && (
                 <button
                   className="mt-2 text-xs text-red-600 underline"
@@ -1211,6 +1274,7 @@ export default function Home() {
             </div>
 
             {/* ================= RIGHT COLUMN — COMMENTS ================= */}
+
             <div className="border rounded p-3 bg-gray-50 space-y-2">
 
               <div className="flex gap-3">
@@ -1299,7 +1363,7 @@ export default function Home() {
                         .insert({
                           user_id: user.id,
                           attempt_id: activeProfileAttempt.id,
-                          second: d.second,
+                          second: d.second === -1 ? 0 : d.second,
                           issue: d.issue,
                           suggestion: d.suggestion,
                         })
@@ -1382,6 +1446,14 @@ export default function Home() {
               >
                 Upload Re-attempt
               </button>
+              {uploading && (
+                <div className="w-full h-2 bg-gray-200 rounded overflow-hidden">
+                  <div
+                    className="h-full bg-black transition-all"
+                    style={{ width: `${uploadProgress}%` }}
+                  />
+                </div>
+              )}
 
 
             </div>
@@ -1402,10 +1474,17 @@ export default function Home() {
                 className="border rounded p-2 text-sm bg-white flex items-start gap-3"
               >
                 {/* PROFILE PIC */}
-                <div className="w-8 h-8 rounded-full bg-gray-300 overflow-hidden flex-shrink-0">
-                  {c.avatar_url && (
+                <div
+                  className="w-8 h-8 rounded-full bg-gray-300 overflow-hidden flex-shrink-0 cursor-pointer"
+                  onClick={() => {
+                    setViewedUserId(c.profiles?.id)
+                    setShowProfile(true)
+                    setActiveProfileAttempt(null)
+                  }}
+                >
+                  {c.profiles?.avatar_url && (
                     <img
-                      src={c.avatar_url}
+                      src={c.profiles.avatar_url}
                       className="w-full h-full object-cover"
                     />
                   )}
@@ -1413,10 +1492,20 @@ export default function Home() {
 
                 {/* COMMENT CONTENT — HORIZONTAL */}
                 <div className="flex items-center gap-3 flex-wrap">
+                  <span
+                    className="font-medium cursor-pointer hover:underline whitespace-nowrap"
+                    onClick={() => {
+                      setViewedUserId(c.profiles?.id)
+                      setShowProfile(true)
+                      setActiveProfileAttempt(null)
+                    }}
+                  >
+                    {c.profiles?.display_name || c.profiles?.username || 'User'}
+                  </span>
 
                   {/* TIMESTAMP */}
                   <span className="text-xs text-gray-500 whitespace-nowrap">
-                    {c.second === -1 ? 'Overall' : `${c.second}s`}
+                    {c.second === 0 ? 'Overall' : `${c.second}s`}
                   </span>
 
                   {/* ISSUE */}
@@ -1533,7 +1622,7 @@ export default function Home() {
           onClick={() => {
             // ✅ CLOSE VIDEO + RESET RE-ATTEMPT
             setActiveProfileAttempt(null)
-            setComments({})
+        
             setOriginalAttempt(null)
             setIsReAttempt(false)
             setReAttemptFile(null)

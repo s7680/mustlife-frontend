@@ -285,10 +285,18 @@ export default function Home() {
       .single()
       .then(({ data }) => {
         if (!data) return
-        if (data.avatar_url) setProfilePicUrl(data.avatar_url)
-        setBio(data.bio ?? '')
-        setDisplayName(data.display_name ?? '')
-        setPublicId(data.public_id ?? '')
+
+        const profile = data as {
+          avatar_url: string | null
+          bio: string | null
+          display_name: string | null
+          public_id: string | null
+        }
+
+        if (profile.avatar_url) setProfilePicUrl(profile.avatar_url)
+        setBio(profile.bio ?? '')
+        setDisplayName(profile.display_name ?? '')
+        setPublicId(profile.public_id ?? '')
       })
   }, [profileUserId])
   useEffect(() => {

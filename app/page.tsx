@@ -22,6 +22,7 @@ type Attempt = {
   processed_video_url: string | null
   skill_id?: string
   parent_attempt_id?: string | null   // ✅ ADD THIS
+  created_at: string
 }
 
 type Comment = {
@@ -48,7 +49,6 @@ type UploadRow = {
 
 /* ================= COMPONENT ================= */
 
-
 const isReAttemptAttempt = (attempt: Attempt) =>
   Boolean(attempt.parent_attempt_id)
 
@@ -61,6 +61,12 @@ export default function Home() {
 
   const [profileCreated, setProfileCreated] = useState(false)
   const [creatingProfile, setCreatingProfile] = useState(false)
+  const [displayName, setDisplayName] = useState('')
+  const [editingName, setEditingName] = useState(false)
+  const [publicId, setPublicId] = useState('')
+  const [editingPublicId, setEditingPublicId] = useState(false)
+  const [publicIdStatus, setPublicIdStatus] =
+    useState<'idle' | 'checking' | 'available' | 'taken'>('idle')
 
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null)
   const [editDraft, setEditDraft] = useState<{
@@ -92,7 +98,7 @@ export default function Home() {
   // ===== PROFILE META (TEMP / UI ONLY) =====
   const [showProfile, setShowProfile] = useState(false)
   const [viewedUserId, setViewedUserId] = useState<string | null>(null)
-  const profileUserId = viewedUserId ?? user?.id
+  const profileUserId = user ? (viewedUserId ?? user.id) : null
   const isOwnProfile = profileUserId === user?.id
   const isFollowing = false
   const impactScore = 0
@@ -172,7 +178,7 @@ export default function Home() {
   const [reAttemptFile, setReAttemptFile] = useState<File | null>(null)
 
   const [userUploads, setUserUploads] = useState<
-    { community: string; skill: string; url: string }[]
+    { community: string; skill: string; url: string; created_at: string }[]
   >([])
 
   useEffect(() => {
@@ -195,6 +201,27 @@ export default function Home() {
 
     return () => clearTimeout(timeout)
   }, [username])
+  useEffect(() => {
+    if (!editingPublicId || !publicId) {
+      setPublicIdStatus('idle')
+      return
+    }
+
+    setPublicIdStatus('checking')
+
+    const t = setTimeout(async () => {
+      const { data } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('public_id', publicId)
+        .neq('id', user.id)
+        .maybeSingle()
+
+      setPublicIdStatus(data ? 'taken' : 'available')
+    }, 400)
+
+    return () => clearTimeout(t)
+  }, [publicId, editingPublicId])
 
 
   /* ---------- INIT ---------- */
@@ -246,18 +273,21 @@ export default function Home() {
 
   // 🔹 FETCH PROFILE DATA (avatar + bio)
   useEffect(() => {
-    if (!user || isGuest) return
+    if (!profileUserId || isGuest) return
 
     supabase
       .from('profiles')
-      .select('avatar_url, bio')
-      .eq('id', user.id)
+      .select('avatar_url, bio, display_name, public_id')
+      .eq('id', profileUserId)
       .single<Profile>()
       .then(({ data }) => {
-        if (data?.avatar_url) setProfilePicUrl(data.avatar_url)
-        if (data?.bio) setBio(data.bio)
+        if (!data) return
+        if (data.avatar_url) setProfilePicUrl(data.avatar_url)
+        setBio(data.bio ?? '')
+        setDisplayName(data.display_name ?? '')
+        setPublicId(data.public_id ?? '')
       })
-  }, [user])
+  }, [profileUserId])
   useEffect(() => {
     if (!user || isGuest) return
 
@@ -308,7 +338,7 @@ export default function Home() {
   async function fetchFeed(skillId?: string) {
     let q = supabase
       .from('attempts')
-      .select('id, user_id, processed_video_url, processing_status, skill_id')
+      .select('id, user_id, processed_video_url, processing_status, skill_id, created_at')
       .eq('processing_status', 'done')          // ✅ ONLY finished
       .not('processed_video_url', 'is', null)   // ✅ must exist
       .order('created_at', { ascending: false })
@@ -335,13 +365,13 @@ export default function Home() {
     if (userIds.length > 0) {
       const { data: profiles } = await supabase
         .from('profiles')
-        .select('id, username, avatar_url')
+        .select('id, username, avatar_url, display_name')
         .in('id', userIds)
 
       const map: any = {}
       profiles?.forEach(p => {
         map[p.id] = {
-          username: p.username,
+          username: p.display_name || p.username,
           avatar_url: p.avatar_url
         }
       })
@@ -387,7 +417,7 @@ export default function Home() {
     if (userIds.length > 0) {
       const { data: profiles } = await supabase
         .from('profiles')
-        .select('id, username, avatar_url')
+        .select('id, username, avatar_url, display_name')
         .in('id', userIds)
 
       const map: any = {}
@@ -433,6 +463,7 @@ export default function Home() {
       .select(`
     processed_video_url,
     parent_attempt_id,
+    created_at,
     skills (
       name,
       community
@@ -454,6 +485,7 @@ export default function Home() {
         community: row.skills?.community ?? 'Unknown',
         skill: row.skills?.name ?? 'Unknown',
         url: row.processed_video_url,
+        created_at: row.created_at,
         isReAttempt: Boolean(row.parent_attempt_id)
       }))
     )
@@ -613,6 +645,27 @@ export default function Home() {
     if (!isGuest) await supabase.auth.signOut()
     setUser(null)
   }
+  /* ===== DELETE PROFILE PICTURE (NEW) ===== */
+  async function deleteProfilePicture() {
+    if (!user) return
+
+    const path = `profile_avatars/${user.id}.jpg`
+
+    // 1️⃣ Delete from storage
+    await supabase.storage
+      .from('profile_avatars')
+      .remove([path])
+
+    // 2️⃣ Remove from DB
+    await supabase
+      .from('profiles')
+      .update({ avatar_url: null })
+      .eq('id', user.id)
+
+    // 3️⃣ Update UI
+    setProfilePicUrl(null)
+    setShowPicModal(false)
+  }
   // ===== AUTH GUARD (ADDED) =====
   function requireAuth(): boolean {
     if (isGuest) {
@@ -723,6 +776,30 @@ export default function Home() {
       return next
     })
   }
+  async function deleteAttempt(attemptId: string) {
+  if (!user) return
+
+  const ok = confirm('Delete this video?')
+  if (!ok) return
+
+  const { error } = await supabase
+    .from('attempts')
+    .delete()
+    .eq('id', attemptId)
+    .eq('user_id', user.id) // 🔐 ownership enforced
+
+  if (error) {
+    alert(error.message)
+    return
+  }
+
+  // UI cleanup
+  setFeed(prev => prev.filter(a => a.id !== attemptId))
+  setUserUploads(prev =>
+    prev.filter(v => v.url !== activeProfileAttempt?.processed_video_url)
+  )
+  setActiveProfileAttempt(null)
+}
   // ===== RE-ATTEMPT UPLOAD HANDLER =====
   async function handleReAttemptUpload() {
     console.log('Re-attempt clicked')
@@ -1112,6 +1189,14 @@ export default function Home() {
                   }))
                 }}
               />
+              {activeProfileAttempt.user_id === user.id && (
+                <button
+                  className="mt-2 text-xs text-red-600 underline"
+                  onClick={() => deleteAttempt(activeProfileAttempt.id)}
+                >
+                  Delete this video
+                </button>
+              )}
             </div>
 
             {/* ================= RIGHT COLUMN — COMMENTS ================= */}
@@ -1241,6 +1326,8 @@ export default function Home() {
             </div>
 
           </div>
+
+
 
           {/* RE-ATTEMPT BUTTON */}
           {!isReAttempt && (
@@ -1429,6 +1516,7 @@ export default function Home() {
             </span>
           </div>
         </div>
+
         {/* ===== PROFILE BUTTON (ADDED) ===== */}
         <button
           onClick={() => {
@@ -1493,13 +1581,16 @@ export default function Home() {
                         const { data } = supabase.storage
                           .from('profile_avatars')
                           .getPublicUrl(path)
+                        const bustedUrl = `${data.publicUrl}?t=${Date.now()}`
 
                         await supabase
                           .from('profiles')
-                          .update({ avatar_url: data.publicUrl })
-                          .eq('id', user.id)
+                          .upsert(
+                            { id: user.id, avatar_url: bustedUrl },
+                            { onConflict: 'id' }
+                          )
 
-                        setProfilePicUrl(data.publicUrl)
+                        setProfilePicUrl(bustedUrl)
                         setShowPicModal(false)
                       }}
                     />
@@ -1508,9 +1599,89 @@ export default function Home() {
               </div>
 
               <div>
-                <div className="text-sm font-medium">{user.email}</div>
+                {editingName && isOwnProfile ? (
+                  <input
+                    className="border p-1 text-sm rounded"
+                    value={displayName}
+                    autoFocus
+                    onChange={e => setDisplayName(e.target.value)}
+                    onBlur={async () => {
+                      setEditingName(false)
+                      await supabase
+                        .from('profiles')
+                        .update({ display_name: displayName })
+                        .eq('id', user.id)
+                    }}
+                    placeholder="Your name"
+                  />
+                ) : (
+                  <div
+                    className={`text-sm font-medium ${isOwnProfile ? 'cursor-pointer' : ''}`}
+                    onClick={() => {
+                      if (isOwnProfile) setEditingName(true)
+                    }}
+                  >
+                    {displayName || 'Unnamed'}
+                  </div>
+                )}
               </div>
             </div>
+
+            {/* PUBLIC ID */}
+            <div className="text-sm">
+              {editingPublicId && isOwnProfile ? (
+                <>
+                  <input
+                    className="border p-1 text-sm rounded w-48"
+                    value={publicId}
+                    autoFocus
+                    onChange={e =>
+                      setPublicId(
+                        e.target.value
+                          .toLowerCase()
+                          .replace(/[^a-z0-9._]/g, '')
+                      )
+                    }
+                    onBlur={async () => {
+                      if (publicIdStatus !== 'available') {
+                        setEditingPublicId(false)
+                        return
+                      }
+
+                      await supabase
+                        .from('profiles')
+                        .update({ public_id: publicId })
+                        .eq('id', user.id)
+
+                      setEditingPublicId(false)
+                    }}
+                    placeholder="your-id"
+                  />
+
+                  <div className="text-xs mt-1">
+                    {publicIdStatus === 'checking' && 'Checking…'}
+                    {publicIdStatus === 'available' && (
+                      <span className="text-green-600">Available</span>
+                    )}
+                    {publicIdStatus === 'taken' && (
+                      <span className="text-red-600">Already taken</span>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <div
+                  className={`text-xs text-gray-600 ${isOwnProfile ? 'cursor-pointer underline' : ''
+                    }`}
+                  onClick={() => {
+                    if (isOwnProfile) setEditingPublicId(true)
+                  }}
+                >
+                  @{publicId || 'set-your-id'}
+                </div>
+              )}
+            </div>
+
+
 
             {/* ===== BIO (NEW) ===== */}
             <div
@@ -1709,6 +1880,9 @@ export default function Home() {
                               className="w-full h-full object-cover"
                               muted
                             />
+                            <div className="text-[10px] text-gray-500 text-center mt-1">
+                              {new Date(v.created_at).toLocaleDateString()}
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -1804,6 +1978,17 @@ export default function Home() {
               key={attempt.id}
               className="bg-white border rounded-xl p-4"
             >
+              {attempt.user_id === user.id && (
+                <button
+                  className="text-xs text-red-600 underline float-right"
+                  onClick={e => {
+                    e.stopPropagation()
+                    deleteAttempt(attempt.id)
+                  }}
+                >
+                  Delete
+                </button>
+              )}
               {/* HEADER (NEW) */}
               <div className="flex items-center gap-3 mb-2">
                 <div
@@ -1817,7 +2002,7 @@ export default function Home() {
                 >
                   {feedProfiles[attempt.user_id]?.avatar_url && (
                     <img
-                     src={feedProfiles[attempt.user_id]?.avatar_url || ''}
+                      src={feedProfiles[attempt.user_id]?.avatar_url || ''}
                       className="w-full h-full object-cover"
                     />
                   )}
@@ -1832,6 +2017,9 @@ export default function Home() {
                     {' → '}
                     {skills.find(s => s.id === attempt.skill_id)?.name}
                   </div>
+                </div>
+                <div className="text-[11px] text-gray-400">
+                  {new Date(attempt.created_at).toLocaleString()}
                 </div>
               </div>
 
@@ -1851,7 +2039,7 @@ export default function Home() {
                   setReAttemptFile(null)
                 }}
               >
-                
+
                 <video
                   src={attempt.processed_video_url!}
                   className="w-full rounded bg-black"
@@ -1890,17 +2078,26 @@ export default function Home() {
                     const { data } = supabase.storage
                       .from('profile_avatars')
                       .getPublicUrl(path)
-
+                    const bustedUrl = `${data.publicUrl}?t=${Date.now()}`
                     await supabase
                       .from('profiles')
-                      .update({ avatar_url: data.publicUrl })
-                      .eq('id', user.id)
+                      .upsert(
+                        { id: user.id, avatar_url: bustedUrl },
+                        { onConflict: 'id' }
+                      )
 
-                    setProfilePicUrl(data.publicUrl)
+                    setProfilePicUrl(bustedUrl)
                     setShowPicModal(false)
                   }}
                 />
               </label>
+
+              <button
+                className="w-full text-sm underline"
+                onClick={deleteProfilePicture}
+              >
+                Delete profile picture
+              </button>
 
               <button
                 className="w-full text-sm underline"

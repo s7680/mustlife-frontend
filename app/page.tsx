@@ -1,0 +1,1918 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+import Image from 'next/image'
+import { supabase } from '../lib/supabase'
+
+/* ================= TYPES ================= */
+type Profile = {
+  avatar_url: string | null
+  bio: string | null
+}
+
+type Skill = {
+  id: string
+  name: string
+  community: string   // ✅ ADD THIS
+}
+
+type Attempt = {
+  id: string
+  user_id: string
+  processed_video_url: string | null
+  skill_id?: string
+  parent_attempt_id?: string | null   // ✅ ADD THIS
+}
+
+type Comment = {
+  id: string            // 👈 comment row id (uuid)
+  user_id: string       // 👈 who wrote the comment
+  attempt_id: string    // 👈 which video
+  second: number
+  issue: string
+  issue_id?: string
+  suggestion: string
+  username?: string
+  avatar_url?: string | null
+  comment_likes?: { user_id: string }[]
+}
+
+type UploadRow = {
+  processed_video_url: string
+  parent_attempt_id: string | null
+  skills: {
+    name: string
+    community: string
+  } | null
+}
+
+/* ================= COMPONENT ================= */
+
+
+const isReAttemptAttempt = (attempt: Attempt) =>
+  Boolean(attempt.parent_attempt_id)
+
+function handleFollow() {
+  alert('Follow logic coming next')
+}
+
+export default function Home() {
+  /* ---------- AUTH ---------- */
+
+  const [profileCreated, setProfileCreated] = useState(false)
+  const [creatingProfile, setCreatingProfile] = useState(false)
+
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null)
+  const [editDraft, setEditDraft] = useState<{
+    second: number
+    issue: string
+    suggestion: string
+  }>({
+    second: 0,
+    issue: '',
+    suggestion: ''
+  })
+  const [loginEmail, setLoginEmail] = useState('')
+  const [signupEmail, setSignupEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [authError, setAuthError] = useState<string | null>(null)
+  const [authMode, setAuthMode] = useState<
+    'login' | 'verify_email' | 'complete_profile' | 'forgot_password' | 'reset_password'
+  >('login')
+  const [isRecoveryFlow, setIsRecoveryFlow] = useState(false)
+
+  const [username, setUsername] = useState('')
+  const [selectedCommunities, setSelectedCommunities] = useState<string[]>([])
+  const [usernameStatus, setUsernameStatus] = useState<
+    'idle' | 'checking' | 'available' | 'taken'
+  >('idle')
+  const [checkingUsername, setCheckingUsername] = useState(false)
+  const [user, setUser] = useState<any>(null)
+  const isGuest = user?.id === 'guest'
+  // ===== PROFILE META (TEMP / UI ONLY) =====
+  const [showProfile, setShowProfile] = useState(false)
+  const [viewedUserId, setViewedUserId] = useState<string | null>(null)
+  const profileUserId = viewedUserId ?? user?.id
+  const isOwnProfile = profileUserId === user?.id
+  const isFollowing = false
+  const impactScore = 0
+
+
+  /* ---------- DATA ---------- */
+  const [skills, setSkills] = useState<Skill[]>([])
+  const [feedProfiles, setFeedProfiles] = useState<
+    Record<string, { username: string; avatar_url: string | null }>
+  >({})
+  const [feed, setFeed] = useState<Attempt[]>([])
+  const [videoMeta, setVideoMeta] = useState<
+    Record<string, { portrait: boolean; duration: number }>
+  >({})
+  const [comments, setComments] = useState<Record<string, Comment[]>>({})
+  const [draftComments, setDraftComments] = useState<
+    Record<string, { second: number; issue: string; suggestion: string }>
+  >({})
+
+
+  const [skillIssues, setSkillIssues] = useState<Record<string, string[]>>({})
+
+  /* ---------- FEED FILTER STATE ---------- */
+  const [filterCommunity, setFilterCommunity] = useState<string | null>(null)
+  const [filterSkill, setFilterSkill] = useState<string | null>(null)
+  const [filterType, setFilterType] = useState<'latest' | 'following' | 'relevance'>('latest')
+  const [filterApplied, setFilterApplied] = useState(false)
+
+  /* ---------- UPLOAD STATE (ADDED) ---------- */
+  const [uploading, setUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const [uploadError, setUploadError] = useState<string | null>(null)
+  // ===== PROFILE VIDEO VIEW (ADDED) =====
+
+
+  const [activeProfileAttempt, setActiveProfileAttempt] = useState<Attempt | null>(null)
+
+  // ===== PROFILE STATE (ADDED) =====
+
+  const previousAttempt =
+    activeProfileAttempt?.parent_attempt_id
+      ? feed.find(a => a.id === activeProfileAttempt.parent_attempt_id) || null
+      : null
+
+  /* 🔹 AUTO-FETCH COMMENTS WHEN A VIDEO OPENS */
+  useEffect(() => {
+    if (!activeProfileAttempt) return
+    fetchComments(activeProfileAttempt.id)
+  }, [activeProfileAttempt])
+
+  useEffect(() => {
+    if (!activeProfileAttempt) return
+
+    setDraftComments(prev => ({
+      ...prev,
+      [activeProfileAttempt.id]: {
+        second: -1,     // Overall
+        issue: '',
+        suggestion: '',
+      },
+    }))
+  }, [activeProfileAttempt])
+
+  const [selectedCommunity, setSelectedCommunity] = useState<string | null>(null)
+  const [selectedSkill, setSelectedSkill] = useState<string | null>(null)
+  const [uploadType, setUploadType] = useState<'raw' | 'processed' | null>(null)
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [bio, setBio] = useState('')
+  const [editingBio, setEditingBio] = useState(false)
+  const [profilePicUrl, setProfilePicUrl] = useState<string | null>(null)
+  const [showPicModal, setShowPicModal] = useState(false)
+  const [followers, setFollowers] = useState<string[]>([])
+  const [followingCount, setFollowingCount] = useState(0)
+  // ===== RE-ATTEMPT STATE =====
+  const [isReAttempt, setIsReAttempt] = useState(false)
+  const [originalAttempt, setOriginalAttempt] = useState<Attempt | null>(null)
+  const [reAttemptFile, setReAttemptFile] = useState<File | null>(null)
+
+  const [userUploads, setUserUploads] = useState<
+    { community: string; skill: string; url: string }[]
+  >([])
+
+  useEffect(() => {
+    if (!username) {
+      setUsernameStatus('idle')
+      return
+    }
+
+    setUsernameStatus('checking')
+
+    const timeout = setTimeout(async () => {
+      const { data } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('username', username)
+        .maybeSingle()
+
+      setUsernameStatus(data ? 'taken' : 'available')
+    }, 500)
+
+    return () => clearTimeout(timeout)
+  }, [username])
+
+
+  /* ---------- INIT ---------- */
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const type = params.get('type')
+
+    // 🔹 PRIORITY: password recovery must override everything
+    if (type === 'recovery') {
+      setAuthMode('reset_password')
+    }
+
+    if (type === 'recovery') {
+      setAuthMode('reset_password')
+      setIsRecoveryFlow(true)
+    }
+
+    supabase.auth.getUser().then(({ data }) => {
+      // ⛔ BLOCK user hydration during recovery
+      if (data?.user && !isRecoveryFlow) {
+        setUser(data.user)
+      }
+    })
+
+    const { data: listener } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        // 🔹 BLOCK normal login flow during recovery
+        if (type === 'recovery') return
+        if (isRecoveryFlow) return
+        setUser(session?.user ?? null)
+
+        if (session?.user && session?.access_token) {
+          if (authMode === 'verify_email') {
+            setAuthMode('complete_profile')
+          }
+        }
+      }
+    )
+
+    fetchSkills()
+    fetchFeed()
+    fetchSkillIssues()
+
+    return () => {
+      listener.subscription.unsubscribe()
+    }
+  }, [])
+
+  // 🔹 FETCH PROFILE DATA (avatar + bio)
+  useEffect(() => {
+    if (!user || isGuest) return
+
+    supabase
+      .from('profiles')
+      .select('avatar_url, bio')
+      .eq('id', user.id)
+      .single<Profile>()
+      .then(({ data }) => {
+        if (data?.avatar_url) setProfilePicUrl(data.avatar_url)
+        if (data?.bio) setBio(data.bio)
+      })
+  }, [user])
+  useEffect(() => {
+    if (!user || isGuest) return
+
+    const fetchFollowers = async () => {
+      const { data, error } = await supabase
+        .from('followers')
+        .select('follower_id')
+        .eq('following_id', user.id)
+
+      if (error) {
+        console.error(error)
+        return
+      }
+
+      setFollowers(data.map(f => f.follower_id))
+      setFollowingCount(data.length)
+    }
+
+    fetchFollowers()
+  }, [user])
+
+
+  /* ---------- FETCH ---------- */
+  async function fetchSkills() {
+    const { data } = await supabase.from('skills').select('*')
+    setSkills(data ?? [])
+  }
+  async function fetchSkillIssues() {
+    const { data, error } = await supabase
+      .from('skill_issues')
+      .select('skill_id, issue')
+
+    if (error) {
+      console.error('Skill issues fetch error:', error)
+      return
+    }
+
+    const grouped: Record<string, string[]> = {}
+
+      ; (data ?? []).forEach(row => {
+        if (!grouped[row.skill_id]) grouped[row.skill_id] = []
+        grouped[row.skill_id].push(row.issue)
+      })
+
+    setSkillIssues(grouped)
+  }
+
+  async function fetchFeed(skillId?: string) {
+    let q = supabase
+      .from('attempts')
+      .select('id, user_id, processed_video_url, processing_status, skill_id')
+      .eq('processing_status', 'done')          // ✅ ONLY finished
+      .not('processed_video_url', 'is', null)   // ✅ must exist
+      .order('created_at', { ascending: false })
+
+    if (skillId) q = q.eq('skill_id', skillId)
+
+    const { data, error } = await q
+
+    if (error) {
+      console.error('Feed error:', error)
+      return
+    }
+
+    console.log(
+      'FIRST ITEM FULL:',
+      JSON.stringify(data?.[0], null, 2)
+    )
+    console.log('FEED DATA:', data)
+    console.log('FIRST ITEM:', data?.[0])
+
+    setFeed(data ?? [])
+    const userIds = [...new Set((data ?? []).map(a => a.user_id))]
+
+    if (userIds.length > 0) {
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, username, avatar_url')
+        .in('id', userIds)
+
+      const map: any = {}
+      profiles?.forEach(p => {
+        map[p.id] = {
+          username: p.username,
+          avatar_url: p.avatar_url
+        }
+      })
+
+      setFeedProfiles(map)
+    }
+  }
+  async function applyHomeFilter() {
+    let q = supabase
+      .from('attempts')
+      .select('id, user_id, processed_video_url, skill_id, created_at')
+      .eq('processing_status', 'done')
+      .not('processed_video_url', 'is', null)
+
+    if (filterSkill) {
+      q = q.eq('skill_id', filterSkill)
+    } else if (filterCommunity) {
+      const skillIds = skills
+        .filter(s => s.community === filterCommunity)
+        .map(s => s.id)
+
+      q = q.in('skill_id', skillIds)
+    }
+
+    // 🔹 MINIMAL RELEVANCE LOGIC
+    if (filterType === 'relevance') {
+      q = q.order('created_at', { ascending: false }) // placeholder relevance
+    }
+
+    if (filterType === 'latest') {
+      q = q.order('created_at', { ascending: false })
+    }
+
+    // following = no-op for now (safe)
+    if (filterType === 'following') {
+      q = q.order('created_at', { ascending: false })
+    }
+
+    const { data } = await q
+    setFeed(data ?? [])
+    const userIds = [...new Set((data ?? []).map(a => a.user_id))]
+
+    if (userIds.length > 0) {
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, username, avatar_url')
+        .in('id', userIds)
+
+      const map: any = {}
+      profiles?.forEach(p => {
+        map[p.id] = {
+          username: p.username,
+          avatar_url: p.avatar_url
+        }
+      })
+
+      setFeedProfiles(map)
+    }
+    setFilterApplied(true)
+  }
+  async function fetchComments(attemptId: string) {
+    const res = await supabase
+      .from('comments')
+      .select('*')
+      .eq('attempt_id', attemptId)
+
+    console.log('FETCH COMMENTS RAW RESULT:', res)
+
+    if (res.error) {
+      console.error('fetchComments error:', res.error)
+      return
+    }
+
+    setComments(prev => ({
+      ...prev,
+      [attemptId]: res.data ?? [],
+    }))
+  }
+  function getTimestampOptions(attemptId: string) {
+    const duration = videoMeta[attemptId]?.duration ?? 60
+    return Array.from({ length: duration }, (_, i) => i + 1)
+  }
+  // ===== FETCH USER UPLOADS (ADDED) =====
+  async function fetchUserUploads() {
+    if (!user || isGuest) return
+
+    const { data, error } = await supabase
+      .from('attempts')
+      .select(`
+    processed_video_url,
+    parent_attempt_id,
+    skills (
+      name,
+      community
+    )
+  `)
+      .eq('user_id', user.id)
+      .eq('processing_status', 'done')
+      .not('processed_video_url', 'is', null)
+      .order('created_at', { ascending: false })
+      .returns<UploadRow[]>()
+
+    if (error) {
+      console.error(error)
+      return
+    }
+
+    setUserUploads(
+      (data ?? []).map(row => ({
+        community: row.skills?.community ?? 'Unknown',
+        skill: row.skills?.name ?? 'Unknown',
+        url: row.processed_video_url,
+        isReAttempt: Boolean(row.parent_attempt_id)
+      }))
+    )
+  }
+
+
+  /* ---------- AUTH ---------- */
+
+
+  async function loginWithPassword() {
+    setAuthError(null)
+    if (!loginEmail || !password) {
+      setAuthError('Email/Username and password required')
+      return
+    }
+
+    const { error } = await supabase.auth.signInWithPassword({
+      email: loginEmail,
+      password,
+    })
+
+    if (error) setAuthError(error.message)
+
+  }
+  async function signupWithPassword() {
+    setAuthError(null)
+
+    if (!signupEmail || !password) {
+      setAuthError('Email and password required')
+      return
+    }
+
+    const { error } = await supabase.auth.signUp({
+      email: signupEmail,
+      password,
+    })
+
+    if (error) {
+      setAuthError(error.message)
+      return
+    }
+
+    // After signup, user must verify email
+    setAuthMode('verify_email')
+  }
+
+
+
+  async function sendEmailVerification() {
+    setAuthError(null)
+
+    if (!signupEmail) {
+      setAuthError('Email required')
+      return
+    }
+
+    const { error } = await supabase.auth.signInWithOtp({
+      email: signupEmail,
+      options: { emailRedirectTo: window.location.origin },
+    })
+
+    if (error) {
+      if (
+        error.message.toLowerCase().includes('registered') ||
+        error.message.toLowerCase().includes('exists')
+      ) {
+        setAuthError('Email already registered. Please log in.')
+      } else {
+        setAuthError(error.message)
+      }
+      return
+    }
+
+    // optional UX feedback
+    alert('Verification link sent. Check your email.')
+  }
+  async function completeSignup() {
+    setAuthError(null)
+
+    if (!username || !password) {
+      setAuthError('Username and password required')
+      return
+    }
+    if (usernameStatus === 'taken') {
+      setAuthError('Please choose a different username')
+      return
+    }
+
+    setCheckingUsername(true)
+
+    // 🔹 1️⃣ CHECK USERNAME UNIQUENESS
+    const { data: existing } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('username', username)
+      .maybeSingle()
+
+    if (existing) {
+      setAuthError('Username already taken')
+      setCheckingUsername(false)
+      return
+    }
+
+    // 🔹 2️⃣ SET PASSWORD
+    const { error: pwdErr } = await supabase.auth.updateUser({ password })
+    if (pwdErr) {
+      setAuthError(pwdErr.message)
+      setCheckingUsername(false)
+      return
+    }
+
+    // 🔹 3️⃣ CREATE PROFILE
+    const { error: profileErr } = await supabase.from('profiles').insert({
+      id: user.id,
+      username,
+      communities: selectedCommunities,
+    })
+
+    if (profileErr) {
+      setAuthError(profileErr.message)
+      setCheckingUsername(false)
+      return
+    }
+
+    setCheckingUsername(false)
+    alert('Profile successfully created')
+    setAuthMode('login')
+  }
+
+
+  function continueAsGuest() {
+    setUser({ id: 'guest', email: 'guest@must.life' })
+  }
+
+  async function sendPasswordReset() {
+    setAuthError(null)
+
+    if (!signupEmail) {
+      setAuthError('Email required')
+      return
+    }
+
+    const { error } = await supabase.auth.resetPasswordForEmail(
+      signupEmail,
+      { redirectTo: window.location.origin }
+    )
+
+    if (error) {
+      setAuthError(error.message)
+      return
+    }
+
+    alert('Password reset link sent. Check your email.')
+  }
+
+  async function logout() {
+    if (!isGuest) await supabase.auth.signOut()
+    setUser(null)
+  }
+  // ===== AUTH GUARD (ADDED) =====
+  function requireAuth(): boolean {
+    if (isGuest) {
+      alert('Please create an account or login to use this feature.')
+      return false
+    }
+    return true
+  }
+  // ===== HANDLE VIDEO UPLOAD (ADDED) =====
+  async function handleVideoUpload() {
+    if (!requireAuth()) return
+
+    if (!selectedFile || !selectedCommunity || !selectedSkill || !uploadType || !user) {
+      alert('Select community, skill, upload type, and video')
+      return
+    }
+
+    const filePath = `${user.id}/${Date.now()}-${selectedFile.name}`
+
+    setUploading(true)
+    setUploadProgress(0)
+    setUploadError(null)
+
+    try {
+      // 1️⃣ Upload to Supabase Storage
+      const { error: uploadErr } = await supabase.storage
+        .from('raw_videos')
+        .upload(filePath, selectedFile, {
+          cacheControl: '3600',
+          upsert: false,
+        })
+
+      if (uploadErr) throw uploadErr
+
+      // Supabase has no real progress → mark as done
+      setUploadProgress(100)
+
+      // 2️⃣ Get public URL
+      const { data: pub } = supabase.storage
+        .from('raw_videos')
+        .getPublicUrl(filePath)
+
+      // 3️⃣ Create attempt (worker will pick this)
+      // 🔹 Resolve skill UUID from name
+      const skill = skills.find(s => s.name === selectedSkill)
+
+      if (!skill) {
+        alert('Invalid skill selected')
+        return
+      }
+
+      // 🔹 Create attempt (worker will pick this)
+      const payload =
+        uploadType === 'raw'
+          ? {
+            user_id: user.id,
+            skill_id: skill.id,
+            processed_video_url: pub.publicUrl,
+            processing_status: 'done'
+          }
+          : {
+            user_id: user.id,
+            skill_id: skill.id,
+            raw_video_url: pub.publicUrl,
+            processing_status: 'pending'
+          }
+
+      const { error: attemptErr } = await supabase
+        .from('attempts')
+        .insert(payload)
+
+      if (attemptErr) throw attemptErr
+
+
+
+      setSelectedFile(null)
+      fetchUserUploads()
+      fetchFeed()
+
+    } catch (err: any) {
+      console.error(err)
+      setUploadError(err.message || 'Upload failed')
+      alert(err.message || 'Upload failed')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+
+
+  /* ===== DELETE COMMENT (ADD HERE) ===== */
+  async function deleteComment(commentId: string) {
+    const { error } = await supabase
+      .from('comments')
+      .delete()
+      .eq('id', commentId)
+
+    if (error) {
+      alert('Failed to delete comment')
+      return
+    }
+
+    setComments(prev => {
+      const next = { ...prev }
+      Object.keys(next).forEach(attemptId => {
+        next[attemptId] = next[attemptId].filter(c => c.id !== commentId)
+      })
+      return next
+    })
+  }
+  // ===== RE-ATTEMPT UPLOAD HANDLER =====
+  async function handleReAttemptUpload() {
+    console.log('Re-attempt clicked')
+
+    if (!user) {
+      alert('Not logged in')
+      return
+    }
+
+    if (!originalAttempt) {
+      alert('Original attempt missing')
+      return
+    }
+
+    if (!reAttemptFile) {
+      alert('No re-attempt file selected')
+      return
+    }
+
+    try {
+      const filePath = `${user.id}/reattempt-${Date.now()}-${reAttemptFile.name}`
+
+      // 1️⃣ Upload new video
+      const { error: uploadErr } = await supabase.storage
+        .from('raw_videos')
+        .upload(filePath, reAttemptFile)
+
+      if (uploadErr) throw uploadErr
+
+      // 2️⃣ Get public URL
+      const { data: pub } = supabase.storage
+        .from('raw_videos')
+        .getPublicUrl(filePath)
+
+      // 3️⃣ Create NEW attempt (linked by same skill + community)
+      const { error: insertErr } = await supabase
+        .from('attempts')
+        .insert({
+          user_id: user.id,
+          skill_id: originalAttempt.skill_id,
+          raw_video_url: pub.publicUrl,
+          processing_status: 'pending',
+          parent_attempt_id: originalAttempt.id // 🔗 IMPORTANT FOR FUTURE COMPARISON
+        })
+
+      if (insertErr) throw insertErr
+
+      // 4️⃣ Reset UI
+      setIsReAttempt(false)
+      setReAttemptFile(null)
+      setOriginalAttempt(null)
+      setActiveProfileAttempt(null)
+      setComments({})
+
+      // 5️⃣ Refresh
+      fetchFeed()
+      fetchUserUploads()
+
+      alert('Re-attempt uploaded successfully')
+
+    } catch (err: any) {
+      console.error(err)
+      alert(err.message || 'Re-attempt upload failed')
+    }
+  }
+  /* ================= LOGIN PAGE ================= */
+
+  if (!user) {
+    return (
+      <main className="min-h-screen flex bg-[#FBF6EC] text-black">
+        <section className="hidden md:flex w-1/2 relative">
+          <Image src="/activities3.jpg" alt="Activities" fill className="object-contain" />
+          <div className="absolute inset-0 bg-black/40 p-12 flex flex-col justify-center">
+
+          </div>
+        </section>
+
+        <section className="w-full md:w-1/2 flex items-center justify-center">
+          <div className="flex flex-col items-center">
+
+            {/* TITLE + TAGLINE */}
+            <div className="mb-6 text-center">
+              <div className="text-4xl font-bold mb-2">MUST_Life</div>
+              <div className="text-sm text-gray-600">
+                Practice together. Improve together.
+              </div>
+            </div>
+            <div className="w-[380px] bg-white border border-gray-200 p-8 rounded-2xl shadow-sm">
+              <h2 className="text-2xl font-semibold mb-6 text-center">
+                Login to MUST_Life
+              </h2>
+
+              <input
+                className="w-full border border-gray-300 p-2 mb-3 rounded"
+                placeholder="Email or Username"
+                value={loginEmail}
+                onChange={e => setLoginEmail(e.target.value)}
+              />
+
+              <input
+                className="w-full border border-gray-300 p-2 mb-3 rounded"
+                placeholder="Password"
+                type="password"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+              />
+
+              {authError && (
+                <p className="text-red-600 text-sm mb-3">{authError}</p>
+              )}
+
+              <button
+                className="w-full bg-black text-white py-2 rounded-lg mb-3"
+                onClick={loginWithPassword}
+              >
+                Login
+              </button>
+
+              {/* ✅ ONLY ADDITION */}
+              <p className="text-sm text-center mb-2">
+                New here? <span className="font-medium">Create account</span>
+              </p>
+
+              <button
+                className="w-full border border-black py-2 rounded-lg mb-4"
+                onClick={() => setAuthMode('verify_email')}
+              >
+                Create account
+              </button>
+
+              <div className="flex justify-between text-sm">
+                <button
+                  className="underline"
+                  onClick={() => setAuthMode('forgot_password')}
+                >
+                  Forgot password?
+                </button>
+                <button className="underline" onClick={continueAsGuest}>
+                  Continue as guest
+                </button>
+              </div>
+            </div>
+
+
+            {authMode === 'verify_email' && (
+              <div className="w-[380px] bg-white border p-6 rounded-xl mt-6">
+                <h3 className="text-lg font-semibold mb-3 text-center">
+                  Verify your email
+                </h3>
+
+                <input
+                  className="w-full border p-2 mb-3 rounded"
+                  placeholder="Email"
+                  value={signupEmail}
+                  onChange={e => setSignupEmail(e.target.value)}
+                />
+                <input
+                  className="w-full border p-2 mb-3 rounded"
+                  type="password"
+                  placeholder="Password (optional)"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                />
+
+                {authError && (
+                  <p className="text-red-600 text-sm mb-2">{authError}</p>
+                )}
+
+                <button
+                  className="w-full bg-black text-white py-2 rounded"
+                  onClick={sendEmailVerification}
+                >
+                  Send verification link
+                </button>
+              </div>
+            )}
+            {authMode === 'forgot_password' && (
+              <div className="w-[380px] bg-white border p-6 rounded-xl mt-6">
+                <h3 className="text-lg font-semibold mb-3 text-center">
+                  Reset password
+                </h3>
+
+                <input
+                  className="w-full border p-2 mb-3 rounded"
+                  placeholder="Email"
+                  value={signupEmail}
+                  onChange={e => setSignupEmail(e.target.value)}
+                />
+
+                {authError && (
+                  <p className="text-red-600 text-sm mb-2">{authError}</p>
+                )}
+
+                <button
+                  className="w-full bg-black text-white py-2 rounded"
+                  onClick={sendPasswordReset}
+                >
+                  Send reset link
+                </button>
+              </div>
+            )}
+
+          </div>
+        </section>
+      </main>
+    )
+  }
+  /* ================= COMPLETE PROFILE ================= */
+
+  if (authMode === 'complete_profile') {
+    return (
+      <main className="min-h-screen flex items-center justify-center bg-[#FBF6EC] text-black">
+        <div className="w-[380px] bg-white border p-6 rounded-2xl space-y-4">
+
+          <h2 className="text-xl font-semibold text-center">
+            Complete your profile
+          </h2>
+
+          {/* USERNAME */}
+          <input
+            className="w-full border p-2 rounded"
+            placeholder="Username"
+            value={username}
+            onChange={e => setUsername(e.target.value.trim())}
+          />
+
+          {/* LIVE STATUS */}
+          {usernameStatus === 'checking' && (
+            <p className="text-xs text-gray-500">Checking…</p>
+          )}
+          {usernameStatus === 'available' && (
+            <p className="text-xs text-green-600">Username available</p>
+          )}
+          {usernameStatus === 'taken' && (
+            <p className="text-xs text-red-600">Username already taken</p>
+          )}
+
+          {/* PASSWORD */}
+          <input
+            className="w-full border p-2 rounded"
+            type="password"
+            placeholder="Set password"
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+          />
+
+          {/* COMMUNITIES */}
+          <div className="space-y-1 text-sm">
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={selectedCommunities.includes('Fitness')}
+                onChange={() =>
+                  setSelectedCommunities(prev =>
+                    prev.includes('Fitness')
+                      ? prev.filter(c => c !== 'Fitness')
+                      : [...prev, 'Fitness']
+                  )
+                }
+              />
+              Fitness
+            </label>
+
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={selectedCommunities.includes('Yoga')}
+                onChange={() =>
+                  setSelectedCommunities(prev =>
+                    prev.includes('Yoga')
+                      ? prev.filter(c => c !== 'Yoga')
+                      : [...prev, 'Yoga']
+                  )
+                }
+              />
+              Yoga
+            </label>
+          </div>
+
+          {authError && (
+            <p className="text-sm text-red-600">{authError}</p>
+          )}
+
+          {/* CREATE PROFILE BUTTON */}
+          <button
+            className="w-full bg-black text-white py-2 rounded disabled:opacity-50"
+            disabled={usernameStatus !== 'available'}
+            onClick={completeSignup}
+          >
+            Create profile
+          </button>
+
+          <p className="text-xs text-center text-gray-500">
+            Profile will be created after email verification
+          </p>
+        </div>
+      </main>
+    )
+  }
+
+  // ================= RESET PASSWORD =================
+  if (authMode === 'reset_password') {
+    return (
+      <main className="min-h-screen flex items-center justify-center bg-[#FBF6EC]">
+        <div className="w-[380px] bg-white border p-6 rounded-xl space-y-4">
+
+          <h2 className="text-xl font-semibold text-center">
+            Set new password
+          </h2>
+
+          <input
+            className="w-full border p-2 rounded"
+            type="password"
+            placeholder="New password"
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+          />
+
+          {authError && (
+            <p className="text-red-600 text-sm">{authError}</p>
+          )}
+
+          <button
+            className="w-full bg-black text-white py-2 rounded"
+            onClick={async () => {
+              const { error } = await supabase.auth.updateUser({ password })
+              if (error) {
+                setAuthError(error.message)
+                return
+              }
+
+              alert('Password updated successfully')
+              setIsRecoveryFlow(false)
+              setAuthMode('login')
+            }}
+          >
+            Update password
+          </button>
+
+        </div>
+      </main>
+    )
+  }
+
+
+  /* ================= HOME ================= */
+
+  return (
+    <main className="min-h-screen bg-[#FBF6EC] text-black">
+      {activeProfileAttempt && !showProfile && (
+        <div className="max-w-6xl mx-auto p-6 space-y-4">
+
+          <div className="grid grid-cols-[2fr_1fr] gap-4">
+
+            {/* ================= LEFT COLUMN — VIDEOS ================= */}
+            <div className="space-y-3">
+
+              {/* COMMUNITY + SKILL (ALWAYS ON TOP) */}
+              <div className="text-xs text-gray-600">
+                {skills.find(s => s.id === activeProfileAttempt.skill_id)?.community}
+                {' • '}
+                {skills.find(s => s.id === activeProfileAttempt.skill_id)?.name}
+              </div>
+
+              {/* PREVIOUS ATTEMPT (OPTIONAL) */}
+              {previousAttempt && (
+                <video
+                  src={previousAttempt.processed_video_url!}
+                  controls
+                  className="w-full max-h-[30vh] rounded bg-black object-contain"
+                />
+              )}
+
+              {/* ACTIVE ATTEMPT */}
+              <video
+                src={activeProfileAttempt.processed_video_url!}
+                controls
+                className="w-full max-h-[70vh] rounded bg-black object-contain"
+                onLoadedMetadata={e => {
+                  const video = e.currentTarget
+                  setVideoMeta(prev => ({
+                    ...prev,
+                    [activeProfileAttempt.id]: {
+                      portrait: video.videoHeight > video.videoWidth,
+                      duration: video.duration,
+                    },
+                  }))
+                }}
+              />
+            </div>
+
+            {/* ================= RIGHT COLUMN — COMMENTS ================= */}
+            <div className="border rounded p-3 bg-gray-50 space-y-2">
+
+              <div className="flex gap-3">
+
+                {/* AVATAR */}
+                <div className="w-8 h-8 rounded-full bg-gray-300 overflow-hidden">
+                  {profilePicUrl && (
+                    <img
+                      src={profilePicUrl}
+                      className="w-full h-full object-cover"
+                    />
+                  )}
+                </div>
+
+                <div className="flex-1 space-y-2">
+
+                  {/* TIMESTAMP (WITH OVERALL) */}
+                  <select
+                    className="border p-1 text-xs w-32"
+                    value={draftComments[activeProfileAttempt.id]?.second ?? -1}
+                    onChange={e =>
+                      setDraftComments(prev => ({
+                        ...prev,
+                        [activeProfileAttempt.id]: {
+                          ...prev[activeProfileAttempt.id],
+                          second: Number(e.target.value),
+                        },
+                      }))
+                    }
+                  >
+                    <option value={-1}>Overall</option>
+                    {getTimestampOptions(activeProfileAttempt.id).map(t => (
+                      <option key={t} value={t}>
+                        {t}s
+                      </option>
+                    ))}
+                  </select>
+
+                  {/* ISSUE */}
+                  <select
+                    className="border p-1 text-sm w-full"
+                    value={draftComments[activeProfileAttempt.id]?.issue ?? ''}
+                    onChange={e =>
+                      setDraftComments(prev => ({
+                        ...prev,
+                        [activeProfileAttempt.id]: {
+                          ...prev[activeProfileAttempt.id],
+                          issue: e.target.value,
+                        },
+                      }))
+                    }
+                  >
+                    <option value="">Select issue</option>
+                    {(skillIssues[activeProfileAttempt.skill_id ?? ''] ?? []).map(i => (
+                      <option key={i} value={i}>{i}</option>
+                    ))}
+                  </select>
+
+                  {/* SUGGESTION */}
+                  <textarea
+                    className="border p-2 text-sm w-full"
+                    placeholder="Suggestion"
+                    value={draftComments[activeProfileAttempt.id]?.suggestion ?? ''}
+                    onChange={e =>
+                      setDraftComments(prev => ({
+                        ...prev,
+                        [activeProfileAttempt.id]: {
+                          ...prev[activeProfileAttempt.id],
+                          suggestion: e.target.value,
+                        },
+                      }))
+                    }
+                  />
+
+                  {/* POST */}
+                  <button
+                    className="text-xs underline"
+                    onClick={async () => {
+                      if (!requireAuth()) return
+
+                      const d = draftComments[activeProfileAttempt.id]
+                      if (!d.issue || !d.suggestion) return
+
+                      const { data: newComment, error } = await supabase
+                        .from('comments')
+                        .insert({
+                          user_id: user.id,
+                          attempt_id: activeProfileAttempt.id,
+                          second: d.second,
+                          issue: d.issue,
+                          suggestion: d.suggestion,
+                        })
+                        .select(`
+    *,
+    comment_likes(user_id)
+  `)
+                        .single()
+
+                      if (error) {
+                        console.error('Comment insert error:', error)
+                        alert(error.message)
+                        return
+                      }
+
+                      // ✅ IMMEDIATE UI UPDATE (UNCHANGED BEHAVIOR)
+                      if (newComment) {
+                        setComments(prev => ({
+                          ...prev,
+                          [activeProfileAttempt.id]: [
+                            ...(prev[activeProfileAttempt.id] ?? []),
+                            newComment,
+                          ],
+                        }))
+                      }
+
+
+                    }}
+                  >
+                    Post
+                  </button>
+
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          {/* RE-ATTEMPT BUTTON */}
+          {!isReAttempt && (
+            <button
+              className="border px-4 py-2 rounded text-sm"
+              onClick={() => {
+                setOriginalAttempt(
+                  activeProfileAttempt?.parent_attempt_id
+                    ? feed.find(a => a.id === activeProfileAttempt.parent_attempt_id) || activeProfileAttempt
+                    : activeProfileAttempt
+                )
+
+                setIsReAttempt(true)
+                setReAttemptFile(null)
+              }}
+            >
+              Re-attempt
+            </button>
+          )}
+
+          {/* RE-ATTEMPT UPLOAD */}
+          {isReAttempt && (
+            <div className="space-y-3">
+
+              <label className="block text-sm underline cursor-pointer">
+                Select re-attempt video
+                <input
+                  type="file"
+                  accept="video/*"
+                  className="hidden"
+                  onChange={e =>
+                    setReAttemptFile(e.target.files?.[0] || null)
+                  }
+                />
+              </label>
+
+              <button
+                className="bg-black text-white px-4 py-2 rounded text-sm disabled:opacity-50"
+                disabled={!reAttemptFile}
+                onClick={handleReAttemptUpload}
+              >
+                Upload Re-attempt
+              </button>
+
+
+            </div>
+          )}
+          {/* ===== COMMENTS ===== */}
+          <div className="mt-6 space-y-3">
+            <div className="font-semibold text-sm">Comments</div>
+
+            {(comments[activeProfileAttempt.id] ?? []).length === 0 && (
+              <div className="text-xs text-gray-500">
+                No comments yet
+              </div>
+            )}
+
+            {(comments[activeProfileAttempt.id] ?? []).map(c => (
+              <div
+                key={c.id}
+                className="border rounded p-2 text-sm bg-white flex items-start gap-3"
+              >
+                {/* PROFILE PIC */}
+                <div className="w-8 h-8 rounded-full bg-gray-300 overflow-hidden flex-shrink-0">
+                  {c.avatar_url && (
+                    <img
+                      src={c.avatar_url}
+                      className="w-full h-full object-cover"
+                    />
+                  )}
+                </div>
+
+                {/* COMMENT CONTENT — HORIZONTAL */}
+                <div className="flex items-center gap-3 flex-wrap">
+
+                  {/* TIMESTAMP */}
+                  <span className="text-xs text-gray-500 whitespace-nowrap">
+                    {c.second === -1 ? 'Overall' : `${c.second}s`}
+                  </span>
+
+                  {/* ISSUE */}
+                  <span className="font-medium whitespace-nowrap">
+                    {c.issue}
+                  </span>
+
+                  {/* SUGGESTION */}
+                  {editingCommentId === c.id ? (
+                    <input
+                      className="border p-1 text-sm"
+                      value={editDraft.suggestion}
+                      onChange={e =>
+                        setEditDraft(prev => ({ ...prev, suggestion: e.target.value }))
+                      }
+                    />
+                  ) : (
+                    <span className="text-gray-700">
+                      {c.suggestion}
+                    </span>
+                  )}
+                  {c.user_id === user.id && editingCommentId !== c.id && (
+                    <button
+                      className="text-xs underline"
+                      onClick={() => {
+                        setEditingCommentId(c.id)
+                        setEditDraft({
+                          second: c.second,
+                          issue: c.issue,
+                          suggestion: c.suggestion,
+                        })
+                      }}
+                    >
+                      Edit
+                    </button>
+                  )}
+                  {editingCommentId === c.id && (
+                    <button
+                      className="text-xs underline"
+                      onClick={async () => {
+                        await supabase
+                          .from('comments')
+                          .update({ suggestion: editDraft.suggestion })
+                          .eq('id', c.id)
+
+                        setEditingCommentId(null)
+                        fetchComments(activeProfileAttempt.id)
+                      }}
+                    >
+                      Save
+                    </button>
+                  )}
+                  {(c.user_id === user.id ||
+                    activeProfileAttempt.user_id === user.id) && (
+                      <button
+                        className="text-xs text-red-600 underline"
+                        onClick={() => deleteComment(c.id)}
+                      >
+                        Delete
+                      </button>
+                    )}
+                  {c.user_id !== user.id && (
+                    <button
+                      className="text-xs underline disabled:opacity-50"
+                      disabled={c.comment_likes?.some(l => l.user_id === user.id)}
+                      onClick={async () => {
+                        const { error } = await supabase
+                          .from('comment_likes')
+                          .insert({
+                            comment_id: c.id,
+                            user_id: user.id,
+                          })
+
+                        if (!error) fetchComments(activeProfileAttempt.id)
+                      }}
+                    >
+                      👍 {c.comment_likes?.length ?? 0}
+                    </button>
+                  )}
+
+                </div>
+              </div>
+            ))}
+          </div>
+
+        </div>
+      )}
+      <header className="sticky top-0 z-20 bg-[#FBF6EC]/90 backdrop-blur border-b border-gray-200 px-6 py-4 flex justify-between">
+        <div className="flex items-center gap-3">
+          <span className="font-semibold text-lg">MUST_Life</span>
+          <div
+            className="relative group cursor-pointer text-sm"
+            onClick={() => {
+              setShowProfile(false)
+
+              // ✅ CLOSE VIDEO + RESET RE-ATTEMPT
+              setActiveProfileAttempt(null)
+              setOriginalAttempt(null)
+              setIsReAttempt(false)
+              setReAttemptFile(null)
+
+              fetchFeed()
+            }}
+          >
+            🏠
+            <span className="absolute -bottom-6 left-1/2 -translate-x-1/2 text-xs border px-2 py-0.5 bg-white hidden group-hover:block">
+              Home
+            </span>
+          </div>
+        </div>
+        {/* ===== PROFILE BUTTON (ADDED) ===== */}
+        <button
+          onClick={() => {
+            // ✅ CLOSE VIDEO + RESET RE-ATTEMPT
+            setActiveProfileAttempt(null)
+            setComments({})
+            setOriginalAttempt(null)
+            setIsReAttempt(false)
+            setReAttemptFile(null)
+
+            setShowProfile(true)
+            fetchUserUploads()
+          }}
+          className="text-sm underline mr-4"
+        >
+          Profile
+        </button>
+        <button onClick={logout} className="text-sm underline">
+          Logout
+        </button>
+      </header>
+      {/* ================= PROFILE PANEL (ADDED) ================= */}
+      {showProfile && !activeProfileAttempt && (
+        <div className="max-w-5xl mx-auto px-6 py-6">
+          <div className="bg-white border border-gray-200 rounded-2xl p-6 space-y-6">
+
+            {/* Profile picture */}
+            {/* Profile picture */}
+            <div className="flex items-center gap-4">
+              <div
+                className="relative w-16 h-16 rounded-full overflow-hidden bg-gray-200 cursor-pointer flex items-center justify-center"
+                onClick={() => {
+                  if (user?.id === profileUserId && profilePicUrl) {
+                    setShowPicModal(true)
+                  }
+                }}
+              >
+                {profilePicUrl ? (
+                  <img
+                    src={profilePicUrl}
+                    alt="Profile"
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <label className="text-xs text-gray-600 text-center cursor-pointer">
+                    👤
+                    <div className="text-[10px]">Choose<br />photo</div>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={async e => {
+                        const file = e.target.files?.[0]
+                        if (!file || !user) return
+
+                        const path = `profile_avatars/${user.id}.jpg`
+
+                        await supabase.storage
+                          .from('profile_avatars')
+                          .upload(path, file, { upsert: true })
+
+                        const { data } = supabase.storage
+                          .from('profile_avatars')
+                          .getPublicUrl(path)
+
+                        await supabase
+                          .from('profiles')
+                          .update({ avatar_url: data.publicUrl })
+                          .eq('id', user.id)
+
+                        setProfilePicUrl(data.publicUrl)
+                        setShowPicModal(false)
+                      }}
+                    />
+                  </label>
+                )}
+              </div>
+
+              <div>
+                <div className="text-sm font-medium">{user.email}</div>
+              </div>
+            </div>
+
+            {/* ===== BIO (NEW) ===== */}
+            <div
+              className={`text-sm border rounded-lg p-3 cursor-pointer
+    ${editingBio ? 'bg-white' : 'bg-gray-50'}
+    ${user?.id !== profileUserId ? 'cursor-default' : ''}`}
+              onClick={() => {
+                if (user?.id === profileUserId) setEditingBio(true)
+              }}
+            >
+              {editingBio && user?.id === profileUserId ? (
+                <textarea
+                  className="w-full text-sm border rounded p-2"
+                  rows={5}
+                  maxLength={200}
+                  autoFocus
+                  value={bio}
+                  onChange={e => setBio(e.target.value)}
+                  onBlur={async () => {
+                    setEditingBio(false)
+                    await supabase
+                      .from('profiles')
+                      .update({ bio })
+                      .eq('id', user.id)
+                  }}
+                  placeholder="Write about yourself (max 200 words)"
+                />
+              ) : (
+                <div
+                  className={`whitespace-pre-wrap ${bio ? '' : 'text-gray-400'}`}
+                >
+                  {bio || 'Click to add bio (max 200 words)'}
+                </div>
+              )}
+            </div>
+            {/* ===== PROFILE STATS + FOLLOW ===== */}
+            <div className="flex items-center gap-6 mt-4 text-sm">
+
+              {/* Impact */}
+              <div className="text-center">
+                <div className="font-semibold">{impactScore}</div>
+                <div className="text-gray-500 text-xs">Impact</div>
+              </div>
+
+              {/* Following */}
+              <div className="text-center">
+                <div className="font-semibold">{followingCount}</div>
+                <div className="text-gray-500 text-xs">Following</div>
+              </div>
+
+              {/* Follow button — ONLY other user's profile */}
+              {user?.id !== profileUserId && (
+                <button
+                  className="border px-3 py-1 rounded text-sm"
+                  onClick={handleFollow}
+                >
+                  {isFollowing ? 'Following' : 'Follow'}
+                </button>
+              )}
+            </div>
+
+
+            {/* Upload Video */}
+            {user?.id === profileUserId && (
+              <div className="space-y-3">
+                <div className="font-semibold">Upload Video</div>
+
+                <select
+                  className="border p-2 w-full"
+                  value={selectedCommunity ?? ''}
+                  onChange={e => {
+                    setSelectedCommunity(e.target.value)
+                    setSelectedSkill(null)
+                  }}
+                >
+                  <option value="">Select Community</option>
+                  <option value="Fitness">Fitness</option>
+                  <option value="Yoga">Yoga</option>
+                </select>
+
+                {selectedCommunity && (
+                  <select
+                    className="border p-2 w-full"
+                    value={selectedSkill ?? ''}
+                    onChange={e => setSelectedSkill(e.target.value)}
+                  >
+                    <option value="">Select Skill</option>
+                    {skills
+                      .filter(s => s.community === selectedCommunity)
+                      .map(s => (
+                        <option key={s.id} value={s.name}>
+                          {s.name}
+                        </option>
+                      ))}
+                  </select>
+                )}
+                {/* ✅ NEW: Upload type */}
+                {selectedSkill && (
+                  <select
+                    className="border p-2 w-full"
+                    value={uploadType ?? ''}
+                    onChange={e => setUploadType(e.target.value as any)}
+                  >
+                    <option value="">Upload type</option>
+                    <option value="raw">Upload raw video</option>
+                    <option value="processed">Upload processed video</option>
+                  </select>
+                )}
+
+                {uploadType && (
+                  <input
+                    type="file"
+                    accept="video/*"
+                    onChange={e => setSelectedFile(e.target.files?.[0] || null)}
+                  />
+                )}
+
+                <button
+                  onClick={handleVideoUpload}
+                  disabled={!selectedFile || uploading}
+                  className={`px-4 py-2 rounded text-sm transition
+    ${uploading
+                      ? 'bg-gray-400 cursor-not-allowed'
+                      : 'bg-black text-white hover:bg-gray-800'}
+  `}
+                >
+                  {uploading ? `Uploading ${uploadProgress}%` : 'Upload'}
+                </button>
+
+                {/* Progress bar */}
+                {uploading && (
+                  <div className="w-full h-2 bg-gray-200 rounded overflow-hidden mt-2">
+                    <div
+                      className="h-full bg-black transition-all"
+                      style={{ width: `${uploadProgress}%` }}
+                    />
+                  </div>
+                )}
+
+                {/* Error */}
+                {uploadError && (
+                  <p className="text-red-600 text-sm mt-2">{uploadError}</p>
+                )}
+              </div>
+            )}
+
+            {/* Uploaded videos */}
+            <div className="space-y-4">
+              {Object.entries(
+                userUploads.reduce((acc: any, v) => {
+                  acc[v.community] ??= {}
+                  acc[v.community][v.skill] ??= []
+                  acc[v.community][v.skill].push(v)
+                  return acc
+                }, {})
+              ).map(([community, skills]) => (
+                <div key={community}>
+                  <div className="text-lg font-bold mt-4">{community}</div>
+
+                  {Object.entries(skills as any).map(([skill, vids]) => (
+                    <div key={skill} className="ml-4">
+                      <div className="text-sm font-semibold text-gray-700 mt-2">
+                        {skill}
+                      </div>
+                      <div className="flex gap-3 flex-wrap mt-2">
+                        {(vids as any[]).map((v, i) => (
+                          <div
+                            key={i}
+                            className="w-24 h-16 bg-black rounded cursor-pointer overflow-hidden"
+                            onClick={() => {
+                              const attempt = feed.find(
+                                a => a.processed_video_url === v.url
+                              )
+                              if (!attempt) {
+                                alert('Attempt not found')
+                                return
+                              }
+
+                              setActiveProfileAttempt(attempt)
+                              setShowProfile(false)
+
+
+                              // reset re-attempt state
+
+                              setOriginalAttempt(
+                                attempt.parent_attempt_id
+                                  ? feed.find(a => a.id === attempt.parent_attempt_id) || attempt
+                                  : attempt
+                              )
+                              setIsReAttempt(false)
+                              setReAttemptFile(null)
+                            }}
+                          >
+                            <video
+                              src={v.url}
+                              className="w-full h-full object-cover"
+                              muted
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* ===== FEED FILTERS ===== */}
+      {!showProfile && !activeProfileAttempt && (
+        <div className="max-w-5xl mx-auto px-6 pt-6">
+          <div className="bg-white border rounded-xl p-4 flex flex-wrap gap-3 items-center">
+
+            {/* 1️⃣ COMMUNITY */}
+            <select
+              className="border p-2 text-sm"
+              value={filterCommunity ?? ''}
+              onChange={e => {
+                setFilterCommunity(e.target.value || null)
+                setFilterSkill(null)
+                setFilterApplied(false)
+              }}
+            >
+              <option value="">Select Community</option>
+              {[...new Set(skills.map(s => s.community))].map(c => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+
+            {/* 2️⃣ SKILL */}
+            <select
+              className="border p-2 text-sm"
+              value={filterSkill ?? ''}
+              disabled={!filterCommunity}
+              onChange={e => {
+                setFilterSkill(e.target.value || null)
+                setFilterApplied(false)
+              }}
+            >
+              <option value="">Select Skill</option>
+              {skills
+                .filter(s => s.community === filterCommunity)
+                .map(s => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+            </select>
+
+            {/* 3️⃣ FILTER TYPE */}
+            <select
+              className="border p-2 text-sm"
+              value={filterType}
+              onChange={e => {
+                setFilterType(e.target.value as any)
+                setFilterApplied(false)
+              }}
+            >
+              <option value="latest">Latest</option>
+              <option value="following">Following</option>
+              <option value="relevance">Relevance</option>
+            </select>
+
+            {/* 4️⃣ APPLY BUTTON */}
+            <button
+              className={`px-4 py-2 text-sm rounded border
+      ${filterApplied ? 'bg-black text-white' : 'bg-white'}
+    `}
+              onClick={applyHomeFilter}
+            >
+              Apply filter
+            </button>
+
+          </div>
+        </div>
+      )}
+
+
+      {/* ================= FEED ================= */}
+      {!showProfile && !activeProfileAttempt && (
+        <div className="max-w-5xl mx-auto p-6 space-y-6">
+          {feed.length === 0 && (
+            <div className="text-center text-sm text-gray-500">
+              No videos yet
+            </div>
+          )}
+
+          {feed.map(attempt => (
+            <div
+              key={attempt.id}
+              className="bg-white border rounded-xl p-4"
+            >
+              {/* HEADER (NEW) */}
+              <div className="flex items-center gap-3 mb-2">
+                <div
+                  className="w-8 h-8 rounded-full bg-gray-300 overflow-hidden cursor-pointer"
+                  onClick={e => {
+                    e.stopPropagation()
+                    setViewedUserId(attempt.user_id)
+                    setShowProfile(true)
+                    setActiveProfileAttempt(null)
+                  }}
+                >
+                  {feedProfiles[attempt.user_id]?.avatar_url && (
+                    <img
+                     src={feedProfiles[attempt.user_id]?.avatar_url || ''}
+                      className="w-full h-full object-cover"
+                    />
+                  )}
+                </div>
+
+                <div className="text-sm">
+                  <div className="font-medium">
+                    {feedProfiles[attempt.user_id]?.username ?? 'User'}
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    {skills.find(s => s.id === attempt.skill_id)?.community}
+                    {' → '}
+                    {skills.find(s => s.id === attempt.skill_id)?.name}
+                  </div>
+                </div>
+              </div>
+
+              {/* VIDEO (UNCHANGED BEHAVIOR) */}
+              <div
+                className="cursor-pointer"
+                onClick={() => {
+                  setActiveProfileAttempt(attempt)
+                  setShowProfile(false)
+
+                  setOriginalAttempt(
+                    attempt.parent_attempt_id
+                      ? feed.find(a => a.id === attempt.parent_attempt_id) || attempt
+                      : attempt
+                  )
+                  setIsReAttempt(false)
+                  setReAttemptFile(null)
+                }}
+              >
+                
+                <video
+                  src={attempt.processed_video_url!}
+                  className="w-full rounded bg-black"
+                  muted
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {
+        showPicModal && profilePicUrl && (
+          <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center">
+            <div className="bg-white p-6 rounded-xl space-y-4 w-[320px]">
+              <img src={profilePicUrl} className="w-full rounded-lg" />
+
+              <label className="block text-center text-sm underline cursor-pointer">
+                Edit picture
+                <input
+                  type="file"
+                  className="hidden"
+                  accept="image/*"
+                  onChange={async e => {
+                    const file = e.target.files?.[0]
+                    if (!file || !user) return
+
+                    const path = `profile_avatars/${user.id}.jpg`
+
+                    const { error } = await supabase.storage
+                      .from('profile_avatars')
+                      .upload(path, file, { upsert: true })
+
+                    if (error) return alert(error.message)
+
+                    const { data } = supabase.storage
+                      .from('profile_avatars')
+                      .getPublicUrl(path)
+
+                    await supabase
+                      .from('profiles')
+                      .update({ avatar_url: data.publicUrl })
+                      .eq('id', user.id)
+
+                    setProfilePicUrl(data.publicUrl)
+                    setShowPicModal(false)
+                  }}
+                />
+              </label>
+
+              <button
+                className="w-full text-sm underline"
+                onClick={() => setShowPicModal(false)}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        )
+      }
+
+    </main >
+  )
+}

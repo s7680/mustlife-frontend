@@ -8,6 +8,8 @@ import { supabase } from '../lib/supabase'
 type Profile = {
   avatar_url: string | null
   bio: string | null
+  display_name: string | null
+  public_id: string | null
 }
 
 type Skill = {

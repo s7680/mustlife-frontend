@@ -42,6 +42,9 @@ type AppComment = {
   issue_id?: string
   suggestion: string
   corrected_at?: string | null
+  clarification?: string | null
+  clarified_by?: string | null
+  clarified_at?: string | null
   username?: string
   avatar_url?: string | null
   comment_likes?: { user_id: string }[]
@@ -74,6 +77,7 @@ function handleFollow() {
 
 export default function Home() {
   /* ---------- AUTH ---------- */
+
   const [helpIntent, setHelpIntent] = useState('')
   const [editingHelpIntent, setEditingHelpIntent] = useState(false)
 
@@ -89,6 +93,8 @@ export default function Home() {
     useState<'idle' | 'checking' | 'available' | 'taken'>('idle')
 
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null)
+  const [clarifyingCommentId, setClarifyingCommentId] = useState<string | null>(null)
+  const [clarificationDraft, setClarificationDraft] = useState('')
 
   const [correctionState, setCorrectionState] = useState<{
     commentId: string
@@ -212,7 +218,8 @@ export default function Home() {
   const [includeCaption, setIncludeCaption] = useState(false)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [role, setRole] = useState<string | null>(null)
-  const [viewerRole, setViewerRole] = useState<string | null>(null) 
+  const [viewerRole, setViewerRole] = useState<string | null>(null)
+  const [showCoachScan, setShowCoachScan] = useState(false)
   const [primaryCommunity, setPrimaryCommunity] = useState<string | null>(null)
   const [primarySkill, setPrimarySkill] = useState<string | null>(null)
   const [bio, setBio] = useState('')
@@ -340,20 +347,6 @@ export default function Home() {
     }
   }, [user, authLoading])
 
-  // ===== FETCH VIEWER ROLE (FOR COACH VIEW) =====
-useEffect(() => {
-  if (!user || user.id === 'guest') return
-
-  supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .single()
-    .then(({ data }) => {
-      setViewerRole(data?.role ?? null)
-    })
-}, [user])
-
   // 🔹 FETCH PROFILE DATA (avatar + bio)
   useEffect(() => {
     if (!profileUserId || isGuest || skills.length === 0) return
@@ -443,6 +436,15 @@ useEffect(() => {
     setRole(data.role ?? null)
     setPrimaryCommunity(data.primary_community ?? null)
     setPrimarySkill(data.primary_skill ?? null)
+    if (user && user.id !== 'guest') {
+      const { data: viewer } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single()
+
+      setViewerRole(viewer?.role ?? null)
+    }
   }
   async function fetchSkills() {
     const { data } = await supabase.from('skills').select('*')
@@ -1900,6 +1902,75 @@ useEffect(() => {
                       {c.suggestion}
                     </span>
                   )}
+
+                  {c.clarification && (
+                    <div className="mt-1 text-xs text-gray-600 italic">
+                      Clarification: {c.clarification}
+                    </div>
+                  )}
+
+
+                  {/* ===== USER CLARIFICATION (ONE TIME) ===== */}
+                  {activeProfileAttempt.user_id === user.id &&
+                    c.user_id !== user.id &&
+                    !c.clarification && (
+                      <button
+                        className="text-xs underline ml-2"
+                        onClick={() => {
+                          setClarifyingCommentId(c.id)
+                          setClarificationDraft('')
+                        }}
+                      >
+                        Ask clarification
+                      </button>
+                    )}
+
+                  {clarifyingCommentId === c.id &&
+                    activeProfileAttempt.user_id === user.id &&
+                    !c.clarification && (
+                      <div className="mt-2 space-y-1 text-xs">
+                        <input
+                          className="border p-1 w-full"
+                          placeholder="Ask clarification (max 200 chars)"
+                          maxLength={200}
+                          value={clarificationDraft}
+                          onChange={e => setClarificationDraft(e.target.value)}
+                        />
+                        <button
+                          className="underline"
+                          onClick={async () => {
+                            await supabase
+                              .from('comments')
+                              .update({
+                                clarification: clarificationDraft,
+                              })
+                              .eq('id', c.id)
+
+                            fetchComments(activeProfileAttempt.id)
+                            setTimeout(() => {
+  setClarifyingCommentId(null)
+}, 0)
+                          }}
+                        >
+                          Send
+                        </button>
+                      </div>
+                    )}
+                  {/* ===== COACH FINAL CLARIFICATION ===== */}
+                  {viewerRole === 'coach' &&
+                    c.user_id === user.id &&
+                    c.clarification &&
+                    !c.clarified_at && (
+                      <button
+                        className="text-xs underline ml-2"
+                        onClick={() => {
+                          setClarifyingCommentId(c.id)
+                          setClarificationDraft('')
+                        }}
+                      >
+                        Clarify
+                      </button>
+                    )}
                   {c.user_id === user.id && editingCommentId !== c.id && (
                     <button
                       className="text-xs underline"
@@ -2540,55 +2611,67 @@ useEffect(() => {
             )}
 
             {/* ===== SKILL DASHBOARD — WHAT AM I WORKING ON ===== */}
-{skillDashboard && (
-  <div className="border rounded-lg p-4 bg-white">
-    ...
-  </div>
-)}
+            {skillDashboard && (
+              <div className="border rounded-lg p-4 bg-white">
+                ...
+              </div>
+            )}
 
-{/* ===== COACH QUICK SCAN (READ-ONLY) ===== */}
-{!isOwnProfile && viewerRole === 'coach' && (
-  <div className="border rounded-lg p-4 bg-gray-50 space-y-3">
-    <div className="text-sm font-semibold">
-      Coach quick scan
-    </div>
+            {/* ===== COACH QUICK SCAN (READ-ONLY) ===== */}
+            {!isOwnProfile && viewerRole === 'coach' && (
+              <div className="border rounded-lg bg-gray-50">
+                {/* HEADER */}
+                <button
+                  className="w-full flex items-center justify-between p-4 text-sm font-semibold"
+                  onClick={() => setShowCoachScan(v => !v)}
+                >
+                  <span>Coach quick scan</span>
+                  <span className="text-xs">
+                    {showCoachScan ? '▲' : '▼'}
+                  </span>
+                </button>
 
-    {/* USER INTENT */}
-    <div className="text-sm">
-      <div className="text-xs text-gray-500 mb-1">
-        User intent
-      </div>
-      <div className="text-xs text-gray-700">
-        {helpIntent || 'No intent specified'}
-      </div>
-    </div>
+                {/* BODY */}
+                {showCoachScan && (
+                  <div className="px-4 pb-4 space-y-3">
+                    {/* USER INTENT */}
+                    <div className="text-sm">
+                      <div className="text-xs text-gray-500 mb-1">
+                        User intent
+                      </div>
+                      <div className="text-xs text-gray-700">
+                        {helpIntent || 'No intent specified'}
+                      </div>
+                    </div>
 
-    {/* LAST CORRECTION */}
-    <div className="text-sm">
-      <div className="text-xs text-gray-500 mb-1">
-        Last correction activity
-      </div>
-      {(() => {
-        const corrected = Object.values(comments)
-          .flat()
-          .filter(c => c.corrected_at)
-          .sort(
-            (a, b) =>
-              new Date(b.corrected_at!).getTime() -
-              new Date(a.corrected_at!).getTime()
-          )[0]
+                    {/* LAST CORRECTION */}
+                    <div className="text-sm">
+                      <div className="text-xs text-gray-500 mb-1">
+                        Last correction activity
+                      </div>
+                      {(() => {
+                        const corrected = Object.values(comments)
+                          .flat()
+                          .filter(c => c.corrected_at)
+                          .sort(
+                            (a, b) =>
+                              new Date(b.corrected_at!).getTime() -
+                              new Date(a.corrected_at!).getTime()
+                          )[0]
 
-        return (
-          <div className="text-xs text-gray-700">
-            {corrected
-              ? new Date(corrected.corrected_at!).toLocaleDateString('en-IN')
-              : 'No corrections yet'}
-          </div>
-        )
-      })()}
-    </div>
-  </div>
-)}
+                        return (
+                          <div className="text-xs text-gray-700">
+                            {corrected
+                              ? new Date(corrected.corrected_at!).toLocaleDateString('en-IN')
+                              : 'No corrections yet'}
+                          </div>
+                        )
+                      })()}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* ===== PROFILE STATS + FOLLOW ===== */}
             <div className="flex items-center gap-6 mt-4 text-sm">

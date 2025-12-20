@@ -10,6 +10,7 @@ type Profile = {
   bio: string | null
   display_name: string | null
   public_id: string | null
+  impact?: number | null
 }
 
 type Skill = {
@@ -25,6 +26,7 @@ type Attempt = {
   skill_id?: string
   parent_attempt_id?: string | null   // ✅ ADD THIS
   created_at: string
+  caption?: string | null
 }
 
 type Comment = {
@@ -68,6 +70,8 @@ function handleFollow() {
 
 export default function Home() {
   /* ---------- AUTH ---------- */
+
+  const [authLoading, setAuthLoading] = useState(true)
 
   const [profileCreated, setProfileCreated] = useState(false)
   const [creatingProfile, setCreatingProfile] = useState(false)
@@ -115,8 +119,19 @@ export default function Home() {
   const [viewedUserId, setViewedUserId] = useState<string | null>(null)
   const profileUserId = user ? (viewedUserId ?? user.id) : null
   const isOwnProfile = profileUserId === user?.id
-  const isFollowing = false
+  const [isFollowing, setIsFollowing] = useState(false)
   const [impactScore, setImpactScore] = useState(0)
+
+  // ===== OPEN PROFILE (CENTRALIZED) =====
+  function openProfile(userId: string) {
+    setViewedUserId(userId)
+    setShowProfile(true)
+    setActiveProfileAttempt(null)
+
+    // persist intent across refresh
+    localStorage.setItem('mustlife:view', 'profile')
+    localStorage.setItem('mustlife:profileUserId', userId)
+  }
 
 
   /* ---------- DATA ---------- */
@@ -177,7 +192,12 @@ export default function Home() {
   const [selectedCommunity, setSelectedCommunity] = useState<string | null>(null)
   const [selectedSkill, setSelectedSkill] = useState<string | null>(null)
   const [uploadType, setUploadType] = useState<'raw' | 'processed' | null>(null)
+  const [attemptCaption, setAttemptCaption] = useState('')
+  const [includeCaption, setIncludeCaption] = useState(false)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [role, setRole] = useState<string | null>(null)
+const [primaryCommunity, setPrimaryCommunity] = useState<string | null>(null)
+const [primarySkill, setPrimarySkill] = useState<string | null>(null)
   const [bio, setBio] = useState('')
   const [editingBio, setEditingBio] = useState(false)
   const [profilePicUrl, setProfilePicUrl] = useState<string | null>(null)
@@ -257,9 +277,10 @@ export default function Home() {
     }
 
     supabase.auth.getUser().then(({ data }) => {
-      if (data?.user && !isRecoveryFlow && user?.id !== 'guest') {
+      if (data?.user && !isRecoveryFlow) {
         setUser(data.user)
       }
+      setAuthLoading(false)
     })
 
     const { data: listener } = supabase.auth.onAuthStateChange(
@@ -269,6 +290,7 @@ export default function Home() {
         if (isRecoveryFlow) return
         if (user?.id !== 'guest') {
           setUser(session?.user ?? null)
+          setAuthLoading(false)
         }
 
         if (session?.user && session?.access_token) {
@@ -288,32 +310,57 @@ export default function Home() {
     }
   }, [])
 
+  // ===== RESTORE PROFILE VIEW AFTER REFRESH =====
+  useEffect(() => {
+    if (!user || authLoading) return
+
+    const view = localStorage.getItem('mustlife:view')
+    const pid = localStorage.getItem('mustlife:profileUserId')
+
+    if (view === 'profile' && pid) {
+      openProfile(pid)
+      fetchUserUploads(pid)
+    }
+  }, [user, authLoading])
+
   // 🔹 FETCH PROFILE DATA (avatar + bio)
   useEffect(() => {
     if (!profileUserId || isGuest) return
 
     supabase
-      .from('profiles')
-      .select('avatar_url, bio, display_name, public_id, impact')
+  .from('profiles')
+  .select('avatar_url, bio, display_name, public_id, impact, role, primary_community, primary_skill')
       .eq('id', profileUserId)
       .single<Profile>()
       .then(({ data }) => {
         if (!data) return
 
-        const profile = data as {
-          avatar_url: string | null
-          bio: string | null
-          display_name: string | null
-          public_id: string | null
-        }
+        const profile = data
 
         if (profile.avatar_url) setProfilePicUrl(profile.avatar_url)
         setBio(profile.bio ?? '')
+
         setDisplayName(profile.display_name ?? '')
         setPublicId(profile.public_id ?? '')
         setImpactScore(profile.impact ?? 0)
+        setRole(profile.role ?? null)
+setPrimaryCommunity(profile.primary_community ?? null)
+setPrimarySkill(profile.primary_skill ?? null)
       })
   }, [profileUserId])
+  useEffect(() => {
+    if (!user || !profileUserId || isOwnProfile) return
+
+    supabase
+      .from('followers')
+      .select('id')
+      .eq('follower_id', user.id)
+      .eq('following_id', profileUserId)
+      .maybeSingle()
+      .then(({ data }) => {
+        setIsFollowing(Boolean(data))
+      })
+  }, [user, profileUserId, isOwnProfile])
   useEffect(() => {
     if (!user || isGuest) return
 
@@ -360,11 +407,25 @@ export default function Home() {
 
     setSkillIssues(grouped)
   }
+async function getFollowingUserIds() {
+  if (!user) return []
 
+  const { data, error } = await supabase
+    .from('followers')
+    .select('following_id')
+    .eq('follower_id', user.id)
+
+  if (error) {
+    console.error('Following fetch error:', error)
+    return []
+  }
+
+  return data.map(f => f.following_id)
+}
   async function fetchFeed(skillId?: string) {
     let q = supabase
       .from('attempts')
-      .select('id, user_id, processed_video_url, processing_status, skill_id, parent_attempt_id, created_at')
+      .select('id, user_id, processed_video_url, processing_status, skill_id, parent_attempt_id, created_at, caption')
       .eq('processing_status', 'done')          // ✅ ONLY finished
       .not('processed_video_url', 'is', null)   // ✅ must exist
       .order('created_at', { ascending: false })
@@ -408,7 +469,7 @@ export default function Home() {
   async function applyHomeFilter() {
     let q = supabase
       .from('attempts')
-      .select('id, user_id, processed_video_url, skill_id, created_at')
+      .select('id, user_id, processed_video_url, skill_id, created_at, caption')
       .eq('processing_status', 'done')
       .not('processed_video_url', 'is', null)
 
@@ -433,8 +494,18 @@ export default function Home() {
 
     // following = no-op for now (safe)
     if (filterType === 'following') {
-      q = q.order('created_at', { ascending: false })
-    }
+  const followingIds = await getFollowingUserIds()
+
+  if (followingIds.length === 0) {
+    setFeed([])
+    setFilterApplied(true)
+    return
+  }
+
+  q = q
+    .in('user_id', followingIds)
+    .order('created_at', { ascending: false })
+}
 
     const { data } = await q
     setFeed(data ?? [])
@@ -501,6 +572,7 @@ export default function Home() {
     processed_video_url,
     parent_attempt_id,
     created_at,
+     caption,
     skills (
       name,
       community
@@ -703,6 +775,31 @@ export default function Home() {
     setProfilePicUrl(null)
     setShowPicModal(false)
   }
+  async function toggleFollow() {
+    if (!user || !profileUserId) return
+
+    if (isFollowing) {
+      // UNFOLLOW
+      await supabase
+        .from('followers')
+        .delete()
+        .eq('follower_id', user.id)
+        .eq('following_id', profileUserId)
+
+      setIsFollowing(false)
+    } else {
+      // FOLLOW
+      await supabase
+        .from('followers')
+        .insert({
+          follower_id: user.id,
+          following_id: profileUserId,
+        })
+
+      setIsFollowing(true)
+    }
+  }
+
   // ===== AUTH GUARD (ADDED) =====
   function requireAuth(): boolean {
     if (isGuest) {
@@ -761,13 +858,15 @@ export default function Home() {
             user_id: user.id,
             skill_id: skill.id,
             processed_video_url: pub.publicUrl,
-            processing_status: 'done'
+            processing_status: 'done',
+            caption: includeCaption ? attemptCaption : null
           }
           : {
             user_id: user.id,
             skill_id: skill.id,
             raw_video_url: pub.publicUrl,
-            processing_status: 'pending'
+            processing_status: 'pending',
+            caption: includeCaption ? attemptCaption : null
           }
 
       const { error: attemptErr } = await supabase
@@ -779,6 +878,8 @@ export default function Home() {
 
 
       setSelectedFile(null)
+      setShowProfile(true)
+      setActiveProfileAttempt(null)
       fetchUserUploads()
       fetchFeed()
 
@@ -955,17 +1056,17 @@ export default function Home() {
         .from('comments')
         .update({ corrected_at: new Date().toISOString() })
         .eq('id', correctionState.commentId)
-        // 🔹 ADD: +5 impact to comment author
-const comment = comments[activeProfileAttempt.id]?.find(
-  c => c.id === correctionState.commentId
-)
+      // 🔹 ADD: +5 impact to comment author
+      const comment = comments[activeProfileAttempt.id]?.find(
+        c => c.id === correctionState.commentId
+      )
 
-if (comment) {
-  await supabase
-    .from('profiles')
-    .update({ impact: impactScore + 5 })
-    .eq('id', comment.user_id)
-}
+      if (comment) {
+        await supabase
+          .from('profiles')
+          .update({ impact: impactScore + 5 })
+          .eq('id', comment.user_id)
+      }
 
       // 5️⃣ Cleanup
       setCorrectionState(null)
@@ -985,6 +1086,13 @@ if (comment) {
 
 
   /* ================= LOGIN PAGE ================= */
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-sm text-gray-500">
+        Loading…
+      </div>
+    )
+  }
 
   if (!user) {
     return (
@@ -1360,6 +1468,11 @@ if (comment) {
 
             {/* ================= RIGHT COLUMN — COMMENTS ================= */}
 
+            {activeProfileAttempt.caption && (
+              <div className="bg-white border rounded p-3 text-sm text-gray-700">
+                {activeProfileAttempt.caption}
+              </div>
+            )}
             <div className="border rounded p-3 bg-gray-50 space-y-2">
 
               <div className="flex gap-3">
@@ -1543,24 +1656,7 @@ if (comment) {
 
             </div>
           )}
-          {/* COMMENT CAPTION */}
-          {comments[activeProfileAttempt.id]?.length > 0 && (
-            <div className="text-sm text-gray-700 bg-white border rounded p-2">
-              <span className="font-medium">
-                {
-                  comments[activeProfileAttempt.id][
-                    comments[activeProfileAttempt.id].length - 1
-                  ].issue
-                }
-              </span>
-              {': '}
-              {
-                comments[activeProfileAttempt.id][
-                  comments[activeProfileAttempt.id].length - 1
-                ].suggestion
-              }
-            </div>
-          )}
+         
           {/* ===== COMMENTS ===== */}
           <div className="mt-6 space-y-3">
             <div className="font-semibold text-sm">Comments</div>
@@ -1580,9 +1676,7 @@ if (comment) {
                 <div
                   className="w-8 h-8 rounded-full bg-gray-300 overflow-hidden flex-shrink-0 cursor-pointer"
                   onClick={() => {
-                    setViewedUserId(c.profiles?.id)
-                    setShowProfile(true)
-                    setActiveProfileAttempt(null)
+                    openProfile(c.profiles?.id!)
                   }}
                 >
                   {c.profiles?.avatar_url && (
@@ -1599,9 +1693,7 @@ if (comment) {
                   <span
                     className="font-medium cursor-pointer hover:underline whitespace-nowrap"
                     onClick={() => {
-                      setViewedUserId(c.profiles?.id)
-                      setShowProfile(true)
-                      setActiveProfileAttempt(null)
+                      openProfile(c.profiles?.id!)
                     }}
                   >
                     {c.profiles?.display_name || c.profiles?.username || 'User'}
@@ -1671,76 +1763,76 @@ if (comment) {
                         Delete
                       </button>
                     )}
-{/* 🔹 ATTEMPT CORRECTION — ONLY FOR VIDEO OWNER */}
-{activeProfileAttempt.user_id === user.id && !c.corrected_at && (
-  <div className="mt-2 ml-11 text-xs">
-    <button
-      className="underline"
-      onClick={() =>
-        setCorrectionState({ commentId: c.id, file: null })
-      }
-    >
-      Attempt correction
-    </button>
-  </div>
-)}
-{c.corrected_at && (
-  <div className="mt-2 ml-11 text-xs text-green-700">
-    <button
-      className="underline"
-      onClick={() => {
-        const correctedAttempt = feed.find(
-          a => a.parent_attempt_id === activeProfileAttempt.id
-        )
+                  {/* 🔹 ATTEMPT CORRECTION — ONLY FOR VIDEO OWNER */}
+                  {activeProfileAttempt.user_id === user.id && !c.corrected_at && (
+                    <div className="mt-2 ml-11 text-xs">
+                      <button
+                        className="underline"
+                        onClick={() =>
+                          setCorrectionState({ commentId: c.id, file: null })
+                        }
+                      >
+                        Attempt correction
+                      </button>
+                    </div>
+                  )}
+                  {c.corrected_at && (
+                    <div className="mt-2 ml-11 text-xs text-green-700">
+                      <button
+                        className="underline"
+                        onClick={() => {
+                          const correctedAttempt = feed.find(
+                            a => a.parent_attempt_id === activeProfileAttempt.id
+                          )
 
-        if (correctedAttempt) {
-          setActiveProfileAttempt(correctedAttempt)
-          setShowProfile(false)
-        }
-      }}
-    >
-      Correction attempted
-    </button>
-  </div>
-)}
+                          if (correctedAttempt) {
+                            setActiveProfileAttempt(correctedAttempt)
+                            setShowProfile(false)
+                          }
+                        }}
+                      >
+                        Correction attempted
+                      </button>
+                    </div>
+                  )}
 
-{/* 🔹 CORRECTION UPLOAD UI */}
-{correctionState?.commentId === c.id && (
-  <div className="mt-2 ml-11 space-y-2 text-xs">
-    <input
-      type="file"
-      accept="video/*"
-      onChange={e =>
-        setCorrectionState(prev =>
-          prev
-            ? { ...prev, file: e.target.files?.[0] || null }
-            : null
-        )
-      }
-    />
+                  {/* 🔹 CORRECTION UPLOAD UI */}
+                  {correctionState?.commentId === c.id && (
+                    <div className="mt-2 ml-11 space-y-2 text-xs">
+                      <input
+                        type="file"
+                        accept="video/*"
+                        onChange={e =>
+                          setCorrectionState(prev =>
+                            prev
+                              ? { ...prev, file: e.target.files?.[0] || null }
+                              : null
+                          )
+                        }
+                      />
 
-    <button
-      className="bg-black text-white px-3 py-1 rounded disabled:opacity-50"
-      disabled={!correctionState.file || uploading}
-      onClick={handleCorrectionUpload}
-    >
-      Upload
-    </button>
+                      <button
+                        className="bg-black text-white px-3 py-1 rounded disabled:opacity-50"
+                        disabled={!correctionState.file || uploading}
+                        onClick={handleCorrectionUpload}
+                      >
+                        Upload
+                      </button>
 
-    {uploading && (
-      <div className="w-40 h-2 bg-gray-200 rounded overflow-hidden">
-        <div
-          className="h-full bg-black"
-          style={{ width: `${uploadProgress}%` }}
-        />
-      </div>
-    )}
-  </div>
-)}
+                      {uploading && (
+                        <div className="w-40 h-2 bg-gray-200 rounded overflow-hidden">
+                          <div
+                            className="h-full bg-black"
+                            style={{ width: `${uploadProgress}%` }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
 
 
-               
-                  
+
+
 
                 </div>
               </div>
@@ -1756,7 +1848,11 @@ if (comment) {
           <div
             className="relative group cursor-pointer text-sm"
             onClick={() => {
+              localStorage.removeItem('mustlife:view')
+              localStorage.removeItem('mustlife:profileUserId')
+
               setShowProfile(false)
+              setViewedUserId(null)
 
               // ✅ CLOSE VIDEO + RESET RE-ATTEMPT
               setActiveProfileAttempt(null)
@@ -1784,8 +1880,8 @@ if (comment) {
             setIsReAttempt(false)
             setReAttemptFile(null)
 
-            setShowProfile(true)
-            fetchUserUploads()
+            openProfile(user.id)
+            fetchUserUploads(user.id)
           }}
           className="text-sm underline mr-4"
         >
@@ -1940,40 +2036,139 @@ if (comment) {
 
 
 
-            {/* ===== BIO (NEW) ===== */}
-            <div
-              className={`text-sm border rounded-lg p-3 cursor-pointer
-    ${editingBio ? 'bg-white' : 'bg-gray-50'}
-    ${user?.id !== profileUserId ? 'cursor-default' : ''}`}
-              onClick={() => {
-                if (user?.id === profileUserId) setEditingBio(true)
-              }}
-            >
-              {editingBio && user?.id === profileUserId ? (
-                <textarea
-                  className="w-full text-sm border rounded p-2"
-                  rows={5}
-                  maxLength={200}
-                  autoFocus
-                  value={bio}
-                  onChange={e => setBio(e.target.value)}
-                  onBlur={async () => {
-                    setEditingBio(false)
-                    await supabase
-                      .from('profiles')
-                      .update({ bio })
-                      .eq('id', user.id)
-                  }}
-                  placeholder="Write about yourself (max 200 words)"
-                />
-              ) : (
-                <div
-                  className={`whitespace-pre-wrap ${bio ? '' : 'text-gray-400'}`}
-                >
-                  {bio || 'Click to add bio (max 200 words)'}
-                </div>
-              )}
-            </div>
+        
+         {/* ===== PROFILE HEADER — WHO IS THIS ATHLETE NOW ===== */}
+<div className="space-y-4 border rounded-lg p-4 bg-gray-50">
+
+  {/* ROLE */}
+  <div className="text-sm">
+    <div className="text-xs text-gray-500 mb-1">Role</div>
+    {isOwnProfile ? (
+      <select
+        className="border p-2 w-full"
+        value={role ?? ''}
+        onChange={async e => {
+          const v = e.target.value || null
+          setRole(v)
+          await supabase.from('profiles')
+            .update({ role: v })
+            .eq('id', user.id)
+        }}
+      >
+        <option value="">Select role</option>
+        <option value="learner">Learner</option>
+        <option value="intermediate">Intermediate</option>
+        <option value="coach">Coach</option>
+      </select>
+    ) : (
+      <div>{role ?? '—'}</div>
+    )}
+  </div>
+
+  {/* PRIMARY COMMUNITY */}
+  <div className="text-sm">
+    <div className="text-xs text-gray-500 mb-1">Primary community</div>
+    {isOwnProfile ? (
+      <select
+        className="border p-2 w-full"
+        value={primaryCommunity ?? ''}
+        onChange={async e => {
+          const v = e.target.value || null
+          setPrimaryCommunity(v)
+          setPrimarySkill(null)
+          await supabase.from('profiles')
+            .update({ primary_community: v, primary_skill: null })
+            .eq('id', user.id)
+        }}
+      >
+        <option value="">Select community</option>
+        {[...new Set(skills.map(s => s.community))].map(c => (
+          <option key={c} value={c}>{c}</option>
+        ))}
+      </select>
+    ) : (
+      <div>{primaryCommunity ?? '—'}</div>
+    )}
+  </div>
+
+  {/* PRIMARY SKILL */}
+  {primaryCommunity && (
+    <div className="text-sm">
+      <div className="text-xs text-gray-500 mb-1">Primary skill</div>
+      {isOwnProfile ? (
+        <select
+          className="border p-2 w-full"
+          value={primarySkill ?? ''}
+          onChange={async e => {
+            const v = e.target.value || null
+            setPrimarySkill(v)
+            await supabase.from('profiles')
+              .update({ primary_skill: v })
+              .eq('id', user.id)
+          }}
+        >
+          <option value="">Select skill</option>
+          {skills
+            .filter(s => s.community === primaryCommunity)
+            .map(s => (
+              <option key={s.id} value={s.name}>{s.name}</option>
+            ))}
+        </select>
+      ) : (
+        <div>{primarySkill ?? '—'}</div>
+      )}
+    </div>
+  )}
+
+  {/* PAST FOCUS (READ-ONLY) */}
+  <div className="text-sm">
+    <div className="text-xs text-gray-500 mb-1">Past focus</div>
+    {Object.entries(
+      userUploads.reduce((acc: any, v) => {
+        acc[v.community] ??= new Set()
+        acc[v.community].add(v.skill)
+        return acc
+      }, {})
+    ).map(([community, skillsSet]) => (
+      <div key={community} className="text-xs text-gray-700">
+        {community} → {[...(skillsSet as Set<string>)].join(', ')}
+      </div>
+    ))}
+  </div>
+
+  {/* ABOUT (BIO) */}
+  <div className="text-sm">
+    <div className="text-xs text-gray-500 mb-1">About</div>
+    {editingBio && isOwnProfile ? (
+      <textarea
+        className="w-full border rounded p-2"
+        rows={4}
+        maxLength={200}
+        autoFocus
+        value={bio}
+        onChange={e => setBio(e.target.value)}
+        onBlur={async () => {
+          setEditingBio(false)
+          await supabase
+            .from('profiles')
+            .update({ bio })
+            .eq('id', user.id)
+        }}
+      />
+    ) : (
+      <div
+        className={`border rounded p-2 bg-white whitespace-pre-wrap ${
+          isOwnProfile ? 'cursor-pointer' : ''
+        }`}
+        onClick={() => isOwnProfile && setEditingBio(true)}
+      >
+        {bio || 'Write about yourself (max 200 words)'}
+      </div>
+    )}
+  </div>
+
+</div>
+
             {/* ===== PROFILE STATS + FOLLOW ===== */}
             <div className="flex items-center gap-6 mt-4 text-sm">
 
@@ -1999,7 +2194,18 @@ if (comment) {
                 </button>
               )}
             </div>
-
+            {/* FOLLOW / UNFOLLOW — ONLY OTHER USER */}
+            {user?.id !== profileUserId && (
+              <button
+                onClick={toggleFollow}
+                className={`px-4 py-2 rounded text-sm border ${isFollowing
+                    ? 'bg-white text-black'
+                    : 'bg-black text-white'
+                  }`}
+              >
+                {isFollowing ? 'Unfollow' : 'Follow'}
+              </button>
+            )}
 
             {/* Upload Video */}
             {user?.id === profileUserId && (
@@ -2049,11 +2255,32 @@ if (comment) {
                 )}
 
                 {uploadType && (
-                  <input
-                    type="file"
-                    accept="video/*"
-                    onChange={e => setSelectedFile(e.target.files?.[0] || null)}
-                  />
+                  <>
+                    {/* ATTEMPT CAPTION */}
+                    <textarea
+                      className="border p-2 w-full text-sm"
+                      rows={4}
+                      maxLength={200}
+                      placeholder="Write about issues in this attempt (max 200 words)"
+                      value={attemptCaption}
+                      onChange={e => setAttemptCaption(e.target.value)}
+                    />
+
+                    <button
+                      type="button"
+                      className={`text-xs underline ${includeCaption ? 'text-green-600' : ''
+                        }`}
+                      onClick={() => setIncludeCaption(true)}
+                    >
+                      Include text
+                    </button>
+
+                    <input
+                      type="file"
+                      accept="video/*"
+                      onChange={e => setSelectedFile(e.target.files?.[0] || null)}
+                    />
+                  </>
                 )}
 
                 <button
@@ -2253,9 +2480,7 @@ if (comment) {
                   className="w-8 h-8 rounded-full bg-gray-300 overflow-hidden cursor-pointer"
                   onClick={e => {
                     e.stopPropagation()
-                    setViewedUserId(attempt.user_id)
-                    setShowProfile(true)
-                    setActiveProfileAttempt(null)
+                    openProfile(attempt.user_id)
                     fetchUserUploads(attempt.user_id)
                   }}
                 >
@@ -2278,7 +2503,9 @@ if (comment) {
                   </div>
                 </div>
                 <div className="text-[11px] text-gray-400">
-                  {new Date(attempt.created_at).toLocaleString()}
+                  {new Date(attempt.created_at).toLocaleString('en-IN', {
+                    timeZone: 'Asia/Kolkata',
+                  })}
                 </div>
               </div>
 
@@ -2301,7 +2528,7 @@ if (comment) {
 
                 <video
                   src={attempt.processed_video_url!}
-                  className="w-full rounded bg-black"
+                  className="w-full max-h-[70vh] rounded bg-black object-contain"
                   muted
                 />
               </div>

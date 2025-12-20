@@ -143,7 +143,7 @@ export default function Home() {
     // persist intent across refresh
     localStorage.setItem('mustlife:view', 'profile')
     localStorage.setItem('mustlife:profileUserId', userId)
-   
+
   }
 
 
@@ -587,7 +587,7 @@ export default function Home() {
     )
   `)
       .eq('attempt_id', attemptId)
-       .returns<Comment[]>() 
+    
 
     console.log('FETCH COMMENTS RAW RESULT:', res)
 
@@ -648,7 +648,7 @@ export default function Home() {
   ) {
     // 1️⃣ Decide active skill
     let activeSkillId = primarySkill
-    let activeSkillName: string | null = null 
+    let activeSkillName: string | null = null
 
     if (!activeSkillId) {
       const { data } = await supabase
@@ -661,18 +661,25 @@ export default function Home() {
         )
         .order('created_at', { ascending: false })
         .limit(1)
-        .maybeSingle()
+        .maybeSingle<{
+          skill_id: string | null
+          skills: {
+            name: string
+            community: string
+          } | null
+        }>()
+
 
       if (!data) {
         setSkillDashboard(null)
         return
       }
-if (!data.skills || !data.skills.name) {
-  setSkillDashboard(null)
-  return
-}
-  const skillsRow: { name: string; community: string } = data.skills
-activeSkillName = data.skills.name
+      if (!data.skills || !data.skills.name) {
+        setSkillDashboard(null)
+        return
+      }
+      const skillsRow: { name: string; community: string } = data.skills
+      activeSkillName = data.skills.name
     }
 
     const skill = skills.find(s => s.id === activeSkillName)

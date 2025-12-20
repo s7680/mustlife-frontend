@@ -461,6 +461,9 @@ export default function Home() {
       display_name,
       username,
       avatar_url
+    ),
+     comment_likes (
+      user_id
     )
   `)
       .eq('attempt_id', attemptId)
@@ -1586,7 +1589,31 @@ export default function Home() {
                         Delete
                       </button>
                     )}
-                  {c.user_id !== user.id && (
+                  {activeProfileAttempt.user_id === user.id && !c.corrected_at && (
+                    <button
+                      className="text-xs underline"
+                      onClick={async () => {
+                        await supabase
+                          .from('comments')
+                          .update({ corrected_at: new Date().toISOString() })
+                          .eq('id', c.id)
+                        // 🔁 START RE-ATTEMPT FLOW (SAME AS BUTTON)
+                        setOriginalAttempt(
+                          activeProfileAttempt.parent_attempt_id
+                            ? feed.find(a => a.id === activeProfileAttempt.parent_attempt_id) || activeProfileAttempt
+                            : activeProfileAttempt
+                        )
+
+                        setIsReAttempt(true)
+                        setReAttemptFile(null)
+
+                        fetchComments(activeProfileAttempt.id)
+                      }}
+                    >
+                      Correct
+                    </button>
+                  )}
+                  {!isGuest && c.user_id !== user.id && (
                     <button
                       className="text-xs underline disabled:opacity-50"
                       disabled={c.comment_likes?.some(l => l.user_id === user.id)}

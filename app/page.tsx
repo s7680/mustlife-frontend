@@ -1868,7 +1868,7 @@ export default function Home() {
 
 
                 {/* COMMENT CONTENT — HORIZONTAL */}
-                <div className="flex items-center gap-3 flex-wrap">
+                <div className="flex flex-col gap-2">
                   <span
                     className="font-medium cursor-pointer hover:underline whitespace-nowrap"
                     onClick={() => {
@@ -1945,6 +1945,14 @@ export default function Home() {
                                 clarification: clarificationDraft,
                               })
                               .eq('id', c.id)
+                              setComments(prev => ({
+  ...prev,
+  [activeProfileAttempt.id]: prev[activeProfileAttempt.id].map(x =>
+    x.id === c.id
+      ? { ...x, clarification: clarificationDraft }
+      : x
+  ),
+}))
 
                             fetchComments(activeProfileAttempt.id)
                             setTimeout(() => {

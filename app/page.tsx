@@ -138,13 +138,12 @@ export default function Home() {
     setViewedUserId(userId)
     setShowProfile(true)
     setActiveProfileAttempt(null)
+    fetchProfile(userId)
 
     // persist intent across refresh
     localStorage.setItem('mustlife:view', 'profile')
     localStorage.setItem('mustlife:profileUserId', userId)
-     if (skills.length > 0) {
-    fetchSkillDashboard(userId, skills)
-  }
+   
   }
 
 
@@ -407,6 +406,26 @@ export default function Home() {
 
 
   /* ---------- FETCH ---------- */
+  async function fetchProfile(userId: string) {
+    const { data } = await supabase
+      .from('profiles')
+      .select(
+        'avatar_url, bio, display_name, public_id, impact, role, primary_community, primary_skill'
+      )
+      .eq('id', userId)
+      .single<Profile>()
+
+    if (!data) return
+
+    setProfilePicUrl(data.avatar_url)
+    setBio(data.bio ?? '')
+    setDisplayName(data.display_name ?? '')
+    setPublicId(data.public_id ?? '')
+    setImpactScore(data.impact ?? 0)
+    setRole(data.role ?? null)
+    setPrimaryCommunity(data.primary_community ?? null)
+    setPrimarySkill(data.primary_skill ?? null)
+  }
   async function fetchSkills() {
     const { data } = await supabase.from('skills').select('*')
     setSkills(data ?? [])
@@ -568,6 +587,7 @@ export default function Home() {
     )
   `)
       .eq('attempt_id', attemptId)
+       .returns<Comment[]>() 
 
     console.log('FETCH COMMENTS RAW RESULT:', res)
 
@@ -627,9 +647,10 @@ export default function Home() {
     skillsList: Skill[]
   ) {
     // 1️⃣ Decide active skill
-    let activeSkillName = primarySkill
+    let activeSkillId = primarySkill
+    let activeSkillName: string | null = null 
 
-    if (!activeSkillName) {
+    if (!activeSkillId) {
       const { data } = await supabase
         .from('attempts')
         .select('skill_id, skills(name, community)')
@@ -646,11 +667,15 @@ export default function Home() {
         setSkillDashboard(null)
         return
       }
-
-      activeSkillName = data.skills.name
+if (!data.skills || !data.skills.name) {
+  setSkillDashboard(null)
+  return
+}
+  const skillsRow: { name: string; community: string } = data.skills
+activeSkillName = data.skills.name
     }
 
-    const skill = skills.find(s => s.name === activeSkillName)
+    const skill = skills.find(s => s.id === activeSkillName)
     if (!skill) return
 
     // 2️⃣ Attempts last 14 days
@@ -943,7 +968,7 @@ export default function Home() {
 
       // 3️⃣ Create attempt (worker will pick this)
       // 🔹 Resolve skill UUID from name
-      const skill = skills.find(s => s.name === selectedSkill)
+      const skill = skills.find(s => s.id === selectedSkill)
 
       if (!skill) {
         alert('Invalid skill selected')
@@ -2210,7 +2235,7 @@ export default function Home() {
                       {skills
                         .filter(s => s.community === primaryCommunity)
                         .map(s => (
-                          <option key={s.id} value={s.name}>{s.name}</option>
+                          <option key={s.id} value={s.id}>{s.name}</option>
                         ))}
                     </select>
                   ) : (
@@ -2383,7 +2408,7 @@ export default function Home() {
                 )}
 
                 {uploadType && (
-                  <>
+                  <div className="space-y-6">
                     {/* ATTEMPT CAPTION */}
                     <textarea
                       className="border p-2 w-full text-sm"
@@ -2394,21 +2419,21 @@ export default function Home() {
                       onChange={e => setAttemptCaption(e.target.value)}
                     />
 
-                    <button
-                      type="button"
-                      className={`text-xs underline ${includeCaption ? 'text-green-600' : ''
-                        }`}
-                      onClick={() => setIncludeCaption(true)}
-                    >
-                      Include text
-                    </button>
+                    <div className="space-y-2">
+                      <button
+                        className={`text-xs underline mb-3 ${includeCaption ? 'text-green-600' : ''}`}
+                        onClick={() => setIncludeCaption(true)}
+                      >
+                        Include text
+                      </button>
 
-                    <input
-                      type="file"
-                      accept="video/*"
-                      onChange={e => setSelectedFile(e.target.files?.[0] || null)}
-                    />
-                  </>
+                      <input
+                        type="file"
+                        accept="video/*"
+                        onChange={e => setSelectedFile(e.target.files?.[0] || null)}
+                      />
+                    </div>
+                  </div>
                 )}
 
                 <button

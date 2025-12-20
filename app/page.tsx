@@ -33,7 +33,7 @@ type Attempt = {
   caption?: string | null
 }
 
-type AppComment  = {
+type AppComment = {
   id: string            // 👈 comment row id (uuid)
   user_id: string       // 👈 who wrote the comment
   attempt_id: string    // 👈 which video
@@ -75,7 +75,7 @@ function handleFollow() {
 export default function Home() {
   /* ---------- AUTH ---------- */
   const [helpIntent, setHelpIntent] = useState('')
-const [editingHelpIntent, setEditingHelpIntent] = useState(false)
+  const [editingHelpIntent, setEditingHelpIntent] = useState(false)
 
   const [authLoading, setAuthLoading] = useState(true)
 
@@ -141,7 +141,7 @@ const [editingHelpIntent, setEditingHelpIntent] = useState(false)
     setShowProfile(true)
     setActiveProfileAttempt(null)
     fetchProfile(userId)
-     fetchAllProfileComments(userId)
+    fetchAllProfileComments(userId)
 
     // persist intent across refresh
     localStorage.setItem('mustlife:view', 'profile')
@@ -590,7 +590,7 @@ const [editingHelpIntent, setEditingHelpIntent] = useState(false)
     )
   `)
       .eq('attempt_id', attemptId)
-    
+
 
     console.log('FETCH COMMENTS RAW RESULT:', res)
 
@@ -605,33 +605,33 @@ const [editingHelpIntent, setEditingHelpIntent] = useState(false)
     }))
   }
   async function fetchAllProfileComments(profileUserId: string) {
-  const { data: attempts } = await supabase
-    .from('attempts')
-    .select('id')
-    .eq('user_id', profileUserId)
+    const { data: attempts } = await supabase
+      .from('attempts')
+      .select('id')
+      .eq('user_id', profileUserId)
 
-  if (!attempts || attempts.length === 0) return
+    if (!attempts || attempts.length === 0) return
 
-  const attemptIds = attempts.map(a => a.id)
+    const attemptIds = attempts.map(a => a.id)
 
-  const { data, error } = await supabase
-    .from('comments')
-    .select('*')
-    .in('attempt_id', attemptIds)
+    const { data, error } = await supabase
+      .from('comments')
+      .select('*')
+      .in('attempt_id', attemptIds)
 
-  if (error) {
-    console.error('Profile comments fetch error:', error)
-    return
+    if (error) {
+      console.error('Profile comments fetch error:', error)
+      return
+    }
+
+    const grouped: Record<string, AppComment[]> = {}
+    data.forEach(c => {
+      grouped[c.attempt_id] ??= []
+      grouped[c.attempt_id].push(c)
+    })
+
+    setComments(grouped)
   }
-
-  const grouped: Record<string, Comment[]> = {}
-  data.forEach(c => {
-    grouped[c.attempt_id] ??= []
-    grouped[c.attempt_id].push(c)
-  })
-
-  setComments(grouped)
-}
   function getTimestampOptions(attemptId: string) {
     const duration = videoMeta[attemptId]?.duration ?? 60
     return Array.from({ length: duration }, (_, i) => i + 1)
@@ -2331,170 +2331,169 @@ const [editingHelpIntent, setEditingHelpIntent] = useState(false)
                 )}
               </div>
               {/* ===== IMPROVEMENT SNAPSHOT (NEW) ===== */}
-<div className="border rounded-lg p-4 bg-white space-y-3">
-  <div className="text-sm font-semibold">
-    Improvement snapshot
-  </div>
-
-  {/* 1️⃣ RECURRING ISSUES */}
-  <div className="text-sm">
-    <div className="text-xs text-gray-500 mb-1">
-      Most recurring issues
-    </div>
-
-    {(() => {
-  /**
-   * Structure:
-   * community -> skill -> issue -> count
-   */
-  const grouped: Record<
-    string,
-    Record<string, Record<string, number>>
-  > = {}
-
-  Object.values(comments).flat().forEach(c => {
-    const attempt = feed.find(a => a.id === c.attempt_id)
-    if (!attempt) return
-
-    const skill = skills.find(s => s.id === attempt.skill_id)
-    if (!skill) return
-
-    grouped[skill.community] ??= {}
-    grouped[skill.community][skill.name] ??= {}
-    grouped[skill.community][skill.name][c.issue] =
-      (grouped[skill.community][skill.name][c.issue] || 0) + 1
-  })
-
-  const communities = Object.keys(grouped)
-  if (communities.length === 0) {
-    return <div className="text-xs text-gray-400">No feedback yet</div>
-  }
-
-  return (
-    <div className="text-xs space-y-3">
-      {communities.map(community => (
-        <div key={community}>
-          <div className="font-medium text-gray-800 mb-1">
-            {community}
-          </div>
-
-          <div className="pl-3 space-y-1">
-            {Object.entries(grouped[community]).map(
-              ([skillName, issues]) => {
-                const topIssue = Object.entries(issues).sort(
-                  (a, b) => b[1] - a[1]
-                )[0]
-
-                return (
-                  <div key={skillName} className="text-gray-700">
-                    {skillName}: {topIssue[0]} ({topIssue[1]})
-                  </div>
-                )
-              }
-            )}
-          </div>
-        </div>
-      ))}
-    </div>
-  )
-})()}
-  </div>
-
-  {/* 2️⃣ ISSUES FIXED VS PENDING */}
-  <div className="text-sm">
-    <div className="text-xs text-gray-500 mb-1">
-      Feedback action
-    </div>
-
-    {(() => {
-  /**
-   * community -> skill -> { fixed, pending }
-   */
-  const grouped: Record<
-    string,
-    Record<string, { fixed: number; pending: number }>
-  > = {}
-
-  Object.values(comments).flat().forEach(c => {
-    const attempt = feed.find(a => a.id === c.attempt_id)
-    if (!attempt) return
-
-    const skill = skills.find(s => s.id === attempt.skill_id)
-    if (!skill) return
-
-    grouped[skill.community] ??= {}
-    grouped[skill.community][skill.name] ??= { fixed: 0, pending: 0 }
-
-    if (c.corrected_at) {
-      grouped[skill.community][skill.name].fixed += 1
-    } else {
-      grouped[skill.community][skill.name].pending += 1
-    }
-  })
-
-  const communities = Object.keys(grouped)
-  if (communities.length === 0) {
-    return <div className="text-xs text-gray-400">No feedback yet</div>
-  }
-
-  return (
-    <div className="text-xs space-y-3">
-      {communities.map(community => (
-        <div key={community}>
-          <div className="font-medium text-gray-800 mb-1">
-            {community}
-          </div>
-
-          <div className="pl-3 space-y-1">
-            {Object.entries(grouped[community]).map(
-              ([skillName, stats]) => (
-                <div key={skillName} className="text-gray-700">
-                  {skillName}: Fixed {stats.fixed} • Pending {stats.pending}
+              <div className="border rounded-lg p-4 bg-white space-y-3">
+                <div className="text-sm font-semibold">
+                  Improvement snapshot
                 </div>
-              )
-            )}
-          </div>
-        </div>
-      ))}
-    </div>
-  )
-})()}
-  </div>
 
-  {/* 3️⃣ USER INTENT */}
-  <div className="text-sm">
-    <div className="text-xs text-gray-500 mb-1">
-      What I want help with right now
-    </div>
+                {/* 1️⃣ RECURRING ISSUES */}
+                <div className="text-sm">
+                  <div className="text-xs text-gray-500 mb-1">
+                    Most recurring issues
+                  </div>
 
-    {editingHelpIntent && isOwnProfile ? (
-      <textarea
-        className="w-full border rounded p-2 text-xs"
-        rows={2}
-        maxLength={200}
-        value={helpIntent}
-        autoFocus
-        onChange={e => setHelpIntent(e.target.value)}
-        onBlur={async () => {
-          setEditingHelpIntent(false)
-          await supabase
-            .from('profiles')
-            .update({ help_intent: helpIntent })
-            .eq('id', user.id)
-        }}
-      />
-    ) : (
-      <div
-        className={`border rounded p-2 text-xs bg-gray-50 ${
-          isOwnProfile ? 'cursor-pointer' : ''
-        }`}
-        onClick={() => isOwnProfile && setEditingHelpIntent(true)}
-      >
-        {helpIntent || 'Click to describe what you want help with'}
-      </div>
-    )}
-  </div>
-</div>
+                  {(() => {
+                    /**
+                     * Structure:
+                     * community -> skill -> issue -> count
+                     */
+                    const grouped: Record<
+                      string,
+                      Record<string, Record<string, number>>
+                    > = {}
+
+                    Object.values(comments).flat().forEach(c => {
+                      const attempt = feed.find(a => a.id === c.attempt_id)
+                      if (!attempt) return
+
+                      const skill = skills.find(s => s.id === attempt.skill_id)
+                      if (!skill) return
+
+                      grouped[skill.community] ??= {}
+                      grouped[skill.community][skill.name] ??= {}
+                      grouped[skill.community][skill.name][c.issue] =
+                        (grouped[skill.community][skill.name][c.issue] || 0) + 1
+                    })
+
+                    const communities = Object.keys(grouped)
+                    if (communities.length === 0) {
+                      return <div className="text-xs text-gray-400">No feedback yet</div>
+                    }
+
+                    return (
+                      <div className="text-xs space-y-3">
+                        {communities.map(community => (
+                          <div key={community}>
+                            <div className="font-medium text-gray-800 mb-1">
+                              {community}
+                            </div>
+
+                            <div className="pl-3 space-y-1">
+                              {Object.entries(grouped[community]).map(
+                                ([skillName, issues]) => {
+                                  const topIssue = Object.entries(issues).sort(
+                                    (a, b) => b[1] - a[1]
+                                  )[0]
+
+                                  return (
+                                    <div key={skillName} className="text-gray-700">
+                                      {skillName}: {topIssue[0]} ({topIssue[1]})
+                                    </div>
+                                  )
+                                }
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  })()}
+                </div>
+
+                {/* 2️⃣ ISSUES FIXED VS PENDING */}
+                <div className="text-sm">
+                  <div className="text-xs text-gray-500 mb-1">
+                    Feedback action
+                  </div>
+
+                  {(() => {
+                    /**
+                     * community -> skill -> { fixed, pending }
+                     */
+                    const grouped: Record<
+                      string,
+                      Record<string, { fixed: number; pending: number }>
+                    > = {}
+
+                    Object.values(comments).flat().forEach(c => {
+                      const attempt = feed.find(a => a.id === c.attempt_id)
+                      if (!attempt) return
+
+                      const skill = skills.find(s => s.id === attempt.skill_id)
+                      if (!skill) return
+
+                      grouped[skill.community] ??= {}
+                      grouped[skill.community][skill.name] ??= { fixed: 0, pending: 0 }
+
+                      if (c.corrected_at) {
+                        grouped[skill.community][skill.name].fixed += 1
+                      } else {
+                        grouped[skill.community][skill.name].pending += 1
+                      }
+                    })
+
+                    const communities = Object.keys(grouped)
+                    if (communities.length === 0) {
+                      return <div className="text-xs text-gray-400">No feedback yet</div>
+                    }
+
+                    return (
+                      <div className="text-xs space-y-3">
+                        {communities.map(community => (
+                          <div key={community}>
+                            <div className="font-medium text-gray-800 mb-1">
+                              {community}
+                            </div>
+
+                            <div className="pl-3 space-y-1">
+                              {Object.entries(grouped[community]).map(
+                                ([skillName, stats]) => (
+                                  <div key={skillName} className="text-gray-700">
+                                    {skillName}: Fixed {stats.fixed} • Pending {stats.pending}
+                                  </div>
+                                )
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  })()}
+                </div>
+
+                {/* 3️⃣ USER INTENT */}
+                <div className="text-sm">
+                  <div className="text-xs text-gray-500 mb-1">
+                    What I want help with right now
+                  </div>
+
+                  {editingHelpIntent && isOwnProfile ? (
+                    <textarea
+                      className="w-full border rounded p-2 text-xs"
+                      rows={2}
+                      maxLength={200}
+                      value={helpIntent}
+                      autoFocus
+                      onChange={e => setHelpIntent(e.target.value)}
+                      onBlur={async () => {
+                        setEditingHelpIntent(false)
+                        await supabase
+                          .from('profiles')
+                          .update({ help_intent: helpIntent })
+                          .eq('id', user.id)
+                      }}
+                    />
+                  ) : (
+                    <div
+                      className={`border rounded p-2 text-xs bg-gray-50 ${isOwnProfile ? 'cursor-pointer' : ''
+                        }`}
+                      onClick={() => isOwnProfile && setEditingHelpIntent(true)}
+                    >
+                      {helpIntent || 'Click to describe what you want help with'}
+                    </div>
+                  )}
+                </div>
+              </div>
 
             </div>
 

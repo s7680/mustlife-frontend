@@ -35,6 +35,7 @@ type Comment = {
   issue: string
   issue_id?: string
   suggestion: string
+  corrected_at?: string | null
   username?: string
   avatar_url?: string | null
   comment_likes?: { user_id: string }[]
@@ -78,8 +79,11 @@ export default function Home() {
     useState<'idle' | 'checking' | 'available' | 'taken'>('idle')
 
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null)
-  const [attemptCorrectionCommentId, setAttemptCorrectionCommentId] =
-    useState<string | null>(null)
+
+  const [correctionState, setCorrectionState] = useState<{
+    commentId: string
+    file: File | null
+  } | null>(null)
   const [editDraft, setEditDraft] = useState<{
     second: number
     issue: string
@@ -834,6 +838,7 @@ export default function Home() {
   }
   // ===== RE-ATTEMPT UPLOAD HANDLER =====
   async function handleReAttemptUpload() {
+    setIsReAttempt(true)
     console.log('Re-attempt clicked')
 
     if (!user) {
@@ -884,15 +889,6 @@ export default function Home() {
       if (insertErr) throw insertErr
 
 
-      // 🔹 MARK COMMENT AS CORRECTION ATTEMPTED
-      if (attemptCorrectionCommentId) {
-        await supabase
-          .from('comments')
-          .update({ corrected_at: new Date().toISOString() })
-          .eq('id', attemptCorrectionCommentId)
-
-        setAttemptCorrectionCommentId(null)
-      }
 
       // 4️⃣ Reset UI
       setIsReAttempt(false)
@@ -915,6 +911,66 @@ export default function Home() {
       alert(err.message || 'Re-attempt upload failed')
     }
   }
+
+  async function handleCorrectionUpload() {
+    if (!user || !activeProfileAttempt || !correctionState?.file) return
+
+    try {
+      setUploading(true)
+      setUploadProgress(0)
+
+      const file = correctionState.file
+      const filePath = `${user.id}/correction-${Date.now()}-${file.name}`
+
+      // 1️⃣ Upload
+      const { error: uploadErr } = await supabase.storage
+        .from('raw_videos')
+        .upload(filePath, file)
+
+      if (uploadErr) throw uploadErr
+
+      setUploadProgress(100)
+
+      // 2️⃣ Public URL
+      const { data: pub } = supabase.storage
+        .from('raw_videos')
+        .getPublicUrl(filePath)
+
+      // 3️⃣ Create attempt (linked to original)
+      const { error: insertErr } = await supabase
+        .from('attempts')
+        .insert({
+          user_id: user.id,
+          skill_id: activeProfileAttempt.skill_id,
+          raw_video_url: pub.publicUrl,
+          processing_status: 'pending',
+          parent_attempt_id: activeProfileAttempt.id
+        })
+
+      if (insertErr) throw insertErr
+
+      // 4️⃣ Mark comment corrected
+      await supabase
+        .from('comments')
+        .update({ corrected_at: new Date().toISOString() })
+        .eq('id', correctionState.commentId)
+
+      // 5️⃣ Cleanup
+      setCorrectionState(null)
+      setUploading(false)
+
+      fetchFeed()
+      fetchUserUploads()
+
+      alert('Correction uploaded')
+
+    } catch (err: any) {
+      setUploading(false)
+      setUploadProgress(0)
+      alert(err.message || 'Correction upload failed')
+    }
+  }
+
 
   /* ================= LOGIN PAGE ================= */
 
@@ -1603,52 +1659,61 @@ export default function Home() {
                         Delete
                       </button>
                     )}
+{/* 🔹 ATTEMPT CORRECTION — ONLY FOR VIDEO OWNER */}
+{activeProfileAttempt.user_id === user.id && !c.corrected_at && (
+  <div className="mt-2 ml-11 text-xs">
+    <button
+      className="underline"
+      onClick={() =>
+        setCorrectionState({ commentId: c.id, file: null })
+      }
+    >
+      Attempt correction
+    </button>
+  </div>
+)}
 
-                  {/* 🔹 ATTEMPT CORRECTION — ADD EXACTLY HERE */}
-          
-                  {activeProfileAttempt.user_id === user.id && !c.corrected_at && (
-                    <label className="text-xs underline cursor-pointer">
-                      Attempt correction
-                      <input
-                        type="file"
-                        accept="video/*"
-                        className="hidden"
-                        onChange={e => {
-                          const file = e.target.files?.[0]
-                          if (!file) return
+{/* 🔹 CORRECTION UPLOAD UI */}
+{correctionState?.commentId === c.id && (
+  <div className="mt-2 ml-11 space-y-2 text-xs">
+    <input
+      type="file"
+      accept="video/*"
+      onChange={e =>
+        setCorrectionState(prev =>
+          prev
+            ? { ...prev, file: e.target.files?.[0] || null }
+            : null
+        )
+      }
+    />
 
-                          setAttemptCorrectionCommentId(c.id)
+    <button
+      className="bg-black text-white px-3 py-1 rounded disabled:opacity-50"
+      disabled={!correctionState.file || uploading}
+      onClick={handleCorrectionUpload}
+    >
+      Upload
+    </button>
 
-                          setOriginalAttempt(activeProfileAttempt)
+    {uploading && (
+      <div className="w-40 h-2 bg-gray-200 rounded overflow-hidden">
+        <div
+          className="h-full bg-black"
+          style={{ width: `${uploadProgress}%` }}
+        />
+      </div>
+    )}
+  </div>
+)}
 
-                          setReAttemptFile(file)
-                          setIsReAttempt(true)
-                        }}
-                      />
-                    </label>
-                  )}
 
-                  {!isGuest && c.user_id !== user.id && (
-                    <button
-                      className="text-xs underline disabled:opacity-50"
-                      disabled={c.comment_likes?.some(l => l.user_id === user.id)}
-                      onClick={async () => {
-                        const { error } = await supabase
-                          .from('comment_likes')
-                          .insert({
-                            comment_id: c.id,
-                            user_id: user.id,
-                          })
-
-                        if (!error) fetchComments(activeProfileAttempt.id)
-                      }}
-                    >
-                      👍 {c.comment_likes?.length ?? 0}
-                    </button>
-                  )}
+               
+                  
 
                 </div>
               </div>
+
             ))}
           </div>
 

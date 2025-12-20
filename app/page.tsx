@@ -116,7 +116,7 @@ export default function Home() {
   const profileUserId = user ? (viewedUserId ?? user.id) : null
   const isOwnProfile = profileUserId === user?.id
   const isFollowing = false
-  const impactScore = 0
+  const [impactScore, setImpactScore] = useState(0)
 
 
   /* ---------- DATA ---------- */
@@ -294,7 +294,7 @@ export default function Home() {
 
     supabase
       .from('profiles')
-      .select('avatar_url, bio, display_name, public_id')
+      .select('avatar_url, bio, display_name, public_id, impact')
       .eq('id', profileUserId)
       .single<Profile>()
       .then(({ data }) => {
@@ -311,6 +311,7 @@ export default function Home() {
         setBio(profile.bio ?? '')
         setDisplayName(profile.display_name ?? '')
         setPublicId(profile.public_id ?? '')
+        setImpactScore(profile.impact ?? 0)
       })
   }, [profileUserId])
   useEffect(() => {
@@ -954,6 +955,17 @@ export default function Home() {
         .from('comments')
         .update({ corrected_at: new Date().toISOString() })
         .eq('id', correctionState.commentId)
+        // 🔹 ADD: +5 impact to comment author
+const comment = comments[activeProfileAttempt.id]?.find(
+  c => c.id === correctionState.commentId
+)
+
+if (comment) {
+  await supabase
+    .from('profiles')
+    .update({ impact: impactScore + 5 })
+    .eq('id', comment.user_id)
+}
 
       // 5️⃣ Cleanup
       setCorrectionState(null)

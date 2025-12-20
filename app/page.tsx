@@ -212,6 +212,7 @@ export default function Home() {
   const [includeCaption, setIncludeCaption] = useState(false)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [role, setRole] = useState<string | null>(null)
+  const [viewerRole, setViewerRole] = useState<string | null>(null) 
   const [primaryCommunity, setPrimaryCommunity] = useState<string | null>(null)
   const [primarySkill, setPrimarySkill] = useState<string | null>(null)
   const [bio, setBio] = useState('')
@@ -338,6 +339,20 @@ export default function Home() {
       fetchUserUploads(pid)
     }
   }, [user, authLoading])
+
+  // ===== FETCH VIEWER ROLE (FOR COACH VIEW) =====
+useEffect(() => {
+  if (!user || user.id === 'guest') return
+
+  supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', user.id)
+    .single()
+    .then(({ data }) => {
+      setViewerRole(data?.role ?? null)
+    })
+}, [user])
 
   // 🔹 FETCH PROFILE DATA (avatar + bio)
   useEffect(() => {
@@ -2523,6 +2538,57 @@ export default function Home() {
                 </div>
               </div>
             )}
+
+            {/* ===== SKILL DASHBOARD — WHAT AM I WORKING ON ===== */}
+{skillDashboard && (
+  <div className="border rounded-lg p-4 bg-white">
+    ...
+  </div>
+)}
+
+{/* ===== COACH QUICK SCAN (READ-ONLY) ===== */}
+{!isOwnProfile && viewerRole === 'coach' && (
+  <div className="border rounded-lg p-4 bg-gray-50 space-y-3">
+    <div className="text-sm font-semibold">
+      Coach quick scan
+    </div>
+
+    {/* USER INTENT */}
+    <div className="text-sm">
+      <div className="text-xs text-gray-500 mb-1">
+        User intent
+      </div>
+      <div className="text-xs text-gray-700">
+        {helpIntent || 'No intent specified'}
+      </div>
+    </div>
+
+    {/* LAST CORRECTION */}
+    <div className="text-sm">
+      <div className="text-xs text-gray-500 mb-1">
+        Last correction activity
+      </div>
+      {(() => {
+        const corrected = Object.values(comments)
+          .flat()
+          .filter(c => c.corrected_at)
+          .sort(
+            (a, b) =>
+              new Date(b.corrected_at!).getTime() -
+              new Date(a.corrected_at!).getTime()
+          )[0]
+
+        return (
+          <div className="text-xs text-gray-700">
+            {corrected
+              ? new Date(corrected.corrected_at!).toLocaleDateString('en-IN')
+              : 'No corrections yet'}
+          </div>
+        )
+      })()}
+    </div>
+  </div>
+)}
 
             {/* ===== PROFILE STATS + FOLLOW ===== */}
             <div className="flex items-center gap-6 mt-4 text-sm">

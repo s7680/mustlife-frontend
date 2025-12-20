@@ -96,6 +96,9 @@ export default function Home() {
   const [clarifyingCommentId, setClarifyingCommentId] = useState<string | null>(null)
   const [clarificationDraft, setClarificationDraft] = useState('')
 
+const [replyingCommentId, setReplyingCommentId] = useState<string | null>(null)
+const [replyDraft, setReplyDraft] = useState('')
+
   const [correctionState, setCorrectionState] = useState<{
     commentId: string
     file: File | null
@@ -1927,7 +1930,7 @@ export default function Home() {
 
                   {clarifyingCommentId === c.id &&
                     activeProfileAttempt.user_id === user.id &&
-                    !c.clarification && (
+                    (
                       <div className="mt-2 space-y-1 text-xs">
                         <input
                           className="border p-1 w-full"
@@ -1937,48 +1940,97 @@ export default function Home() {
                           onChange={e => setClarificationDraft(e.target.value)}
                         />
                         <button
-                          className="underline"
-                          onClick={async () => {
-                            await supabase
-                              .from('comments')
-                              .update({
-                                clarification: clarificationDraft,
-                              })
-                              .eq('id', c.id)
-                              setComments(prev => ({
-  ...prev,
-  [activeProfileAttempt.id]: prev[activeProfileAttempt.id].map(x =>
-    x.id === c.id
-      ? { ...x, clarification: clarificationDraft }
-      : x
-  ),
-}))
+  className="underline"
+  onClick={async () => {
+    const text = clarificationDraft
 
-                            fetchComments(activeProfileAttempt.id)
-                            setTimeout(() => {
-  setClarifyingCommentId(null)
-}, 0)
-                          }}
-                        >
-                          Send
-                        </button>
+    await supabase
+      .from('comments')
+      .update({
+        clarification: text,
+      })
+      .eq('id', c.id)
+
+    // ✅ ONLY LOCAL STATE UPDATE
+    setComments(prev => ({
+      ...prev,
+      [activeProfileAttempt.id]: prev[activeProfileAttempt.id].map(x =>
+        x.id === c.id
+          ? { ...x, clarification: text }
+          : x
+      ),
+    }))
+
+    setClarifyingCommentId(null)
+  }}
+>
+  Send
+</button>
                       </div>
                     )}
                   {/* ===== COACH FINAL CLARIFICATION ===== */}
-                  {viewerRole === 'coach' &&
-                    c.user_id === user.id &&
-                    c.clarification &&
-                    !c.clarified_at && (
-                      <button
-                        className="text-xs underline ml-2"
-                        onClick={() => {
-                          setClarifyingCommentId(c.id)
-                          setClarificationDraft('')
-                        }}
-                      >
-                        Clarify
-                      </button>
-                    )}
+                 {viewerRole === 'coach' &&
+  c.user_id === user.id &&
+  c.clarification &&
+  !c.clarified_at && (
+    <button
+      className="text-xs underline ml-2"
+      onClick={() => {
+        setReplyingCommentId(c.id)
+        setReplyDraft('')
+      }}
+    >
+      Reply
+    </button>
+)}
+{replyingCommentId === c.id &&
+  viewerRole === 'coach' &&
+  c.clarification &&
+  !c.clarified_at && (
+    <div className="mt-2 space-y-1 text-xs">
+      <textarea
+        className="border p-1 w-full"
+        placeholder="Reply to clarification (max 200 chars)"
+        maxLength={200}
+        value={replyDraft}
+        onChange={e => setReplyDraft(e.target.value)}
+      />
+      <button
+        className="underline"
+        onClick={async () => {
+          const text = replyDraft
+
+          await supabase
+            .from('comments')
+            .update({
+              suggestion: text,
+              clarified_by: user.id,
+              clarified_at: new Date().toISOString(),
+            })
+            .eq('id', c.id)
+
+          // ✅ local state update ONLY
+          setComments(prev => ({
+            ...prev,
+            [activeProfileAttempt.id]: prev[activeProfileAttempt.id].map(x =>
+              x.id === c.id
+                ? {
+                    ...x,
+                    suggestion: text,
+                    clarified_by: user.id,
+                    clarified_at: new Date().toISOString(),
+                  }
+                : x
+            ),
+          }))
+
+          setReplyingCommentId(null)
+        }}
+      >
+        Submit reply
+      </button>
+    </div>
+)}
                   {c.user_id === user.id && editingCommentId !== c.id && (
                     <button
                       className="text-xs underline"

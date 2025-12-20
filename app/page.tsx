@@ -1,5 +1,5 @@
 'use client'
-
+export const dynamic = 'force-dynamic'
 
 import { useEffect, useState } from 'react'
 import Image from 'next/image'
@@ -74,6 +74,8 @@ function handleFollow() {
 
 export default function Home() {
   /* ---------- AUTH ---------- */
+  const [helpIntent, setHelpIntent] = useState('')
+const [editingHelpIntent, setEditingHelpIntent] = useState(false)
 
   const [authLoading, setAuthLoading] = useState(true)
 
@@ -2299,6 +2301,99 @@ export default function Home() {
                   </div>
                 )}
               </div>
+              {/* ===== IMPROVEMENT SNAPSHOT (NEW) ===== */}
+<div className="border rounded-lg p-4 bg-white space-y-3">
+  <div className="text-sm font-semibold">
+    Improvement snapshot
+  </div>
+
+  {/* 1️⃣ RECURRING ISSUES */}
+  <div className="text-sm">
+    <div className="text-xs text-gray-500 mb-1">
+      Most recurring issues
+    </div>
+
+    {(() => {
+      const issueCount: Record<string, number> = {}
+
+      Object.values(comments).flat().forEach(c => {
+        issueCount[c.issue] = (issueCount[c.issue] || 0) + 1
+      })
+
+      const sorted = Object.entries(issueCount)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+
+      if (sorted.length === 0) {
+        return <div className="text-xs text-gray-400">No feedback yet</div>
+      }
+
+      return (
+        <div className="text-xs text-gray-700 space-y-1">
+          {sorted.map(([issue, count]) => (
+            <div key={issue}>
+              • {issue} ({count})
+            </div>
+          ))}
+        </div>
+      )
+    })()}
+  </div>
+
+  {/* 2️⃣ ISSUES FIXED VS PENDING */}
+  <div className="text-sm">
+    <div className="text-xs text-gray-500 mb-1">
+      Feedback action
+    </div>
+
+    {(() => {
+      const allComments = Object.values(comments).flat()
+      const fixed = allComments.filter(c => c.corrected_at).length
+      const pending = allComments.length - fixed
+
+      return (
+        <div className="text-xs text-gray-700">
+          Fixed: <span className="font-medium">{fixed}</span> • Pending:{' '}
+          <span className="font-medium">{pending}</span>
+        </div>
+      )
+    })()}
+  </div>
+
+  {/* 3️⃣ USER INTENT */}
+  <div className="text-sm">
+    <div className="text-xs text-gray-500 mb-1">
+      What I want help with right now
+    </div>
+
+    {editingHelpIntent && isOwnProfile ? (
+      <textarea
+        className="w-full border rounded p-2 text-xs"
+        rows={2}
+        maxLength={200}
+        value={helpIntent}
+        autoFocus
+        onChange={e => setHelpIntent(e.target.value)}
+        onBlur={async () => {
+          setEditingHelpIntent(false)
+          await supabase
+            .from('profiles')
+            .update({ help_intent: helpIntent })
+            .eq('id', user.id)
+        }}
+      />
+    ) : (
+      <div
+        className={`border rounded p-2 text-xs bg-gray-50 ${
+          isOwnProfile ? 'cursor-pointer' : ''
+        }`}
+        onClick={() => isOwnProfile && setEditingHelpIntent(true)}
+      >
+        {helpIntent || 'Click to describe what you want help with'}
+      </div>
+    )}
+  </div>
+</div>
 
             </div>
 

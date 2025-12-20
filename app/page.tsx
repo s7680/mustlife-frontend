@@ -11,6 +11,9 @@ type Profile = {
   display_name: string | null
   public_id: string | null
   impact?: number | null
+  role?: string | null
+  primary_community?: string | null
+  primary_skill?: string | null
 }
 
 type Skill = {
@@ -121,6 +124,13 @@ export default function Home() {
   const isOwnProfile = profileUserId === user?.id
   const [isFollowing, setIsFollowing] = useState(false)
   const [impactScore, setImpactScore] = useState(0)
+  const [skillDashboard, setSkillDashboard] = useState<{
+    community: string
+    skill: string
+    attempts14d: number
+    feedbackActed: number
+    lastAttemptAt: string | null
+  } | null>(null)
 
   // ===== OPEN PROFILE (CENTRALIZED) =====
   function openProfile(userId: string) {
@@ -131,6 +141,9 @@ export default function Home() {
     // persist intent across refresh
     localStorage.setItem('mustlife:view', 'profile')
     localStorage.setItem('mustlife:profileUserId', userId)
+     if (skills.length > 0) {
+    fetchSkillDashboard(userId, skills)
+  }
   }
 
 
@@ -196,8 +209,8 @@ export default function Home() {
   const [includeCaption, setIncludeCaption] = useState(false)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [role, setRole] = useState<string | null>(null)
-const [primaryCommunity, setPrimaryCommunity] = useState<string | null>(null)
-const [primarySkill, setPrimarySkill] = useState<string | null>(null)
+  const [primaryCommunity, setPrimaryCommunity] = useState<string | null>(null)
+  const [primarySkill, setPrimarySkill] = useState<string | null>(null)
   const [bio, setBio] = useState('')
   const [editingBio, setEditingBio] = useState(false)
   const [profilePicUrl, setProfilePicUrl] = useState<string | null>(null)
@@ -325,11 +338,12 @@ const [primarySkill, setPrimarySkill] = useState<string | null>(null)
 
   // 🔹 FETCH PROFILE DATA (avatar + bio)
   useEffect(() => {
-    if (!profileUserId || isGuest) return
+    if (!profileUserId || isGuest || skills.length === 0) return
+
 
     supabase
-  .from('profiles')
-  .select('avatar_url, bio, display_name, public_id, impact, role, primary_community, primary_skill')
+      .from('profiles')
+      .select('avatar_url, bio, display_name, public_id, impact, role, primary_community, primary_skill')
       .eq('id', profileUserId)
       .single<Profile>()
       .then(({ data }) => {
@@ -337,15 +351,23 @@ const [primarySkill, setPrimarySkill] = useState<string | null>(null)
 
         const profile = data
 
-        if (profile.avatar_url) setProfilePicUrl(profile.avatar_url)
-        setBio(profile.bio ?? '')
+        if (profile.avatar_url !== null) {
+          setProfilePicUrl(profile.avatar_url)
+        }
+
+        if (profile.bio !== null) {
+          setBio(profile.bio)
+        }
 
         setDisplayName(profile.display_name ?? '')
         setPublicId(profile.public_id ?? '')
         setImpactScore(profile.impact ?? 0)
         setRole(profile.role ?? null)
-setPrimaryCommunity(profile.primary_community ?? null)
-setPrimarySkill(profile.primary_skill ?? null)
+        setPrimaryCommunity(profile.primary_community ?? null)
+        setPrimarySkill(profile.primary_skill ?? null)
+        if (skills.length > 0) {
+          fetchSkillDashboard(profileUserId, skills)
+        }
       })
   }, [profileUserId])
   useEffect(() => {
@@ -407,21 +429,21 @@ setPrimarySkill(profile.primary_skill ?? null)
 
     setSkillIssues(grouped)
   }
-async function getFollowingUserIds() {
-  if (!user) return []
+  async function getFollowingUserIds() {
+    if (!user) return []
 
-  const { data, error } = await supabase
-    .from('followers')
-    .select('following_id')
-    .eq('follower_id', user.id)
+    const { data, error } = await supabase
+      .from('followers')
+      .select('following_id')
+      .eq('follower_id', user.id)
 
-  if (error) {
-    console.error('Following fetch error:', error)
-    return []
+    if (error) {
+      console.error('Following fetch error:', error)
+      return []
+    }
+
+    return data.map(f => f.following_id)
   }
-
-  return data.map(f => f.following_id)
-}
   async function fetchFeed(skillId?: string) {
     let q = supabase
       .from('attempts')
@@ -494,18 +516,18 @@ async function getFollowingUserIds() {
 
     // following = no-op for now (safe)
     if (filterType === 'following') {
-  const followingIds = await getFollowingUserIds()
+      const followingIds = await getFollowingUserIds()
 
-  if (followingIds.length === 0) {
-    setFeed([])
-    setFilterApplied(true)
-    return
-  }
+      if (followingIds.length === 0) {
+        setFeed([])
+        setFilterApplied(true)
+        return
+      }
 
-  q = q
-    .in('user_id', followingIds)
-    .order('created_at', { ascending: false })
-}
+      q = q
+        .in('user_id', followingIds)
+        .order('created_at', { ascending: false })
+    }
 
     const { data } = await q
     setFeed(data ?? [])
@@ -598,6 +620,82 @@ async function getFollowingUserIds() {
         isReAttempt: Boolean(row.parent_attempt_id)
       }))
     )
+  }
+  async function fetchSkillDashboard(
+    profileUserId: string,
+    skillsList: Skill[]
+  ) {
+    // 1️⃣ Decide active skill
+    let activeSkillName = primarySkill
+
+    if (!activeSkillName) {
+      const { data } = await supabase
+        .from('attempts')
+        .select('skill_id, skills(name, community)')
+        .eq('user_id', profileUserId)
+        .gte(
+          'created_at',
+          new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString()
+        )
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (!data) {
+        setSkillDashboard(null)
+        return
+      }
+
+      activeSkillName = data.skills.name
+    }
+
+    const skill = skills.find(s => s.name === activeSkillName)
+    if (!skill) return
+
+    // 2️⃣ Attempts last 14 days
+    const { count: attempts14d } = await supabase
+      .from('attempts')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', profileUserId)
+      .eq('skill_id', skill.id)
+      .gte(
+        'created_at',
+        new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString()
+      )
+
+    // 3️⃣ Feedback acted upon
+    const { count: feedbackActed } = await supabase
+      .from('comments')
+      .select('id', { count: 'exact', head: true })
+      .neq('corrected_at', null)
+      .in(
+        'attempt_id',
+        (
+          await supabase
+            .from('attempts')
+            .select('id')
+            .eq('user_id', profileUserId)
+            .eq('skill_id', skill.id)
+        ).data?.map(a => a.id) ?? []
+      )
+
+    // 4️⃣ Last attempt time
+    const { data: last } = await supabase
+      .from('attempts')
+      .select('created_at')
+      .eq('user_id', profileUserId)
+      .eq('skill_id', skill.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    setSkillDashboard({
+      community: skill.community,
+      skill: skill.name,
+      attempts14d: attempts14d ?? 0,
+      feedbackActed: feedbackActed ?? 0,
+      lastAttemptAt: last?.created_at ?? null,
+    })
   }
 
 
@@ -1656,7 +1754,7 @@ async function getFollowingUserIds() {
 
             </div>
           )}
-         
+
           {/* ===== COMMENTS ===== */}
           <div className="mt-6 space-y-3">
             <div className="font-semibold text-sm">Comments</div>
@@ -2036,138 +2134,167 @@ async function getFollowingUserIds() {
 
 
 
-        
-         {/* ===== PROFILE HEADER — WHO IS THIS ATHLETE NOW ===== */}
-<div className="space-y-4 border rounded-lg p-4 bg-gray-50">
 
-  {/* ROLE */}
-  <div className="text-sm">
-    <div className="text-xs text-gray-500 mb-1">Role</div>
-    {isOwnProfile ? (
-      <select
-        className="border p-2 w-full"
-        value={role ?? ''}
-        onChange={async e => {
-          const v = e.target.value || null
-          setRole(v)
-          await supabase.from('profiles')
-            .update({ role: v })
-            .eq('id', user.id)
-        }}
-      >
-        <option value="">Select role</option>
-        <option value="learner">Learner</option>
-        <option value="intermediate">Intermediate</option>
-        <option value="coach">Coach</option>
-      </select>
-    ) : (
-      <div>{role ?? '—'}</div>
-    )}
-  </div>
+            {/* ===== PROFILE HEADER — WHO IS THIS ATHLETE NOW ===== */}
+            <div className="space-y-4 border rounded-lg p-4 bg-gray-50">
 
-  {/* PRIMARY COMMUNITY */}
-  <div className="text-sm">
-    <div className="text-xs text-gray-500 mb-1">Primary community</div>
-    {isOwnProfile ? (
-      <select
-        className="border p-2 w-full"
-        value={primaryCommunity ?? ''}
-        onChange={async e => {
-          const v = e.target.value || null
-          setPrimaryCommunity(v)
-          setPrimarySkill(null)
-          await supabase.from('profiles')
-            .update({ primary_community: v, primary_skill: null })
-            .eq('id', user.id)
-        }}
-      >
-        <option value="">Select community</option>
-        {[...new Set(skills.map(s => s.community))].map(c => (
-          <option key={c} value={c}>{c}</option>
-        ))}
-      </select>
-    ) : (
-      <div>{primaryCommunity ?? '—'}</div>
-    )}
-  </div>
+              {/* ROLE */}
+              <div className="text-sm">
+                <div className="text-xs text-gray-500 mb-1">Role</div>
+                {isOwnProfile ? (
+                  <select
+                    className="border p-2 w-full"
+                    value={role ?? ''}
+                    onChange={async e => {
+                      const v = e.target.value || null
+                      setRole(v)
+                      await supabase.from('profiles')
+                        .update({ role: v })
+                        .eq('id', user.id)
+                    }}
+                  >
+                    <option value="">Select role</option>
+                    <option value="learner">Learner</option>
+                    <option value="intermediate">Intermediate</option>
+                    <option value="coach">Coach</option>
+                  </select>
+                ) : (
+                  <div>{role ?? '—'}</div>
+                )}
+              </div>
 
-  {/* PRIMARY SKILL */}
-  {primaryCommunity && (
-    <div className="text-sm">
-      <div className="text-xs text-gray-500 mb-1">Primary skill</div>
-      {isOwnProfile ? (
-        <select
-          className="border p-2 w-full"
-          value={primarySkill ?? ''}
-          onChange={async e => {
-            const v = e.target.value || null
-            setPrimarySkill(v)
-            await supabase.from('profiles')
-              .update({ primary_skill: v })
-              .eq('id', user.id)
-          }}
-        >
-          <option value="">Select skill</option>
-          {skills
-            .filter(s => s.community === primaryCommunity)
-            .map(s => (
-              <option key={s.id} value={s.name}>{s.name}</option>
-            ))}
-        </select>
-      ) : (
-        <div>{primarySkill ?? '—'}</div>
-      )}
-    </div>
-  )}
+              {/* PRIMARY COMMUNITY */}
+              <div className="text-sm">
+                <div className="text-xs text-gray-500 mb-1">Primary community</div>
+                {isOwnProfile ? (
+                  <select
+                    className="border p-2 w-full"
+                    value={primaryCommunity ?? ''}
+                    onChange={async e => {
+                      const v = e.target.value || null
+                      setPrimaryCommunity(v)
+                      setPrimarySkill(null)
+                      await supabase.from('profiles')
+                        .update({ primary_community: v, primary_skill: null })
+                        .eq('id', user.id)
+                    }}
+                  >
+                    <option value="">Select community</option>
+                    {[...new Set(skills.map(s => s.community))].map(c => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <div>{primaryCommunity ?? '—'}</div>
+                )}
+              </div>
 
-  {/* PAST FOCUS (READ-ONLY) */}
-  <div className="text-sm">
-    <div className="text-xs text-gray-500 mb-1">Past focus</div>
-    {Object.entries(
-      userUploads.reduce((acc: any, v) => {
-        acc[v.community] ??= new Set()
-        acc[v.community].add(v.skill)
-        return acc
-      }, {})
-    ).map(([community, skillsSet]) => (
-      <div key={community} className="text-xs text-gray-700">
-        {community} → {[...(skillsSet as Set<string>)].join(', ')}
-      </div>
-    ))}
-  </div>
+              {/* PRIMARY SKILL */}
+              {primaryCommunity && (
+                <div className="text-sm">
+                  <div className="text-xs text-gray-500 mb-1">Primary skill</div>
+                  {isOwnProfile ? (
+                    <select
+                      className="border p-2 w-full"
+                      value={primarySkill ?? ''}
+                      onChange={async e => {
+                        const v = e.target.value || null
+                        setPrimarySkill(v)
+                        await supabase.from('profiles')
+                          .update({ primary_skill: v })
+                          .eq('id', user.id)
+                      }}
+                    >
+                      <option value="">Select skill</option>
+                      {skills
+                        .filter(s => s.community === primaryCommunity)
+                        .map(s => (
+                          <option key={s.id} value={s.name}>{s.name}</option>
+                        ))}
+                    </select>
+                  ) : (
+                    <div>{primarySkill ?? '—'}</div>
+                  )}
+                </div>
+              )}
 
-  {/* ABOUT (BIO) */}
-  <div className="text-sm">
-    <div className="text-xs text-gray-500 mb-1">About</div>
-    {editingBio && isOwnProfile ? (
-      <textarea
-        className="w-full border rounded p-2"
-        rows={4}
-        maxLength={200}
-        autoFocus
-        value={bio}
-        onChange={e => setBio(e.target.value)}
-        onBlur={async () => {
-          setEditingBio(false)
-          await supabase
-            .from('profiles')
-            .update({ bio })
-            .eq('id', user.id)
-        }}
-      />
-    ) : (
-      <div
-        className={`border rounded p-2 bg-white whitespace-pre-wrap ${
-          isOwnProfile ? 'cursor-pointer' : ''
-        }`}
-        onClick={() => isOwnProfile && setEditingBio(true)}
-      >
-        {bio || 'Write about yourself (max 200 words)'}
-      </div>
-    )}
-  </div>
+              {/* PAST FOCUS (READ-ONLY) */}
+              <div className="text-sm">
+                <div className="text-xs text-gray-500 mb-1">Past focus</div>
+                {Object.entries(
+                  userUploads.reduce((acc: any, v) => {
+                    acc[v.community] ??= new Set()
+                    acc[v.community].add(v.skill)
+                    return acc
+                  }, {})
+                ).map(([community, skillsSet]) => (
+                  <div key={community} className="text-xs text-gray-700">
+                    {community} → {[...(skillsSet as Set<string>)].join(', ')}
+                  </div>
+                ))}
+              </div>
 
-</div>
+              {/* ABOUT (BIO) */}
+              <div className="text-sm">
+                <div className="text-xs text-gray-500 mb-1">About</div>
+                {editingBio && isOwnProfile ? (
+                  <textarea
+                    className="w-full border rounded p-2"
+                    rows={4}
+                    maxLength={200}
+                    autoFocus
+                    value={bio}
+                    onChange={e => setBio(e.target.value)}
+                    onBlur={async () => {
+                      setEditingBio(false)
+
+                      if (bio.trim() === '') return
+
+                      await supabase
+                        .from('profiles')
+                        .update({ bio })
+                        .eq('id', user.id)
+                    }}
+                  />
+                ) : (
+                  <div
+                    className={`border rounded p-2 bg-white whitespace-pre-wrap ${isOwnProfile ? 'cursor-pointer' : ''
+                      }`}
+                    onClick={() => isOwnProfile && setEditingBio(true)}
+                  >
+                    {bio || 'Write about yourself (max 200 words)'}
+                  </div>
+                )}
+              </div>
+
+            </div>
+
+
+            {/* ===== SKILL DASHBOARD — WHAT AM I WORKING ON ===== */}
+            {skillDashboard && (
+              <div className="border rounded-lg p-4 bg-white">
+                <div className="text-sm font-semibold mb-2">
+                  Current focus
+                </div>
+
+                <div className="text-sm text-gray-700">
+                  {skillDashboard.community} • {skillDashboard.skill}
+                </div>
+
+                <div className="mt-2 text-xs text-gray-600 space-y-1">
+                  <div>Attempts (last 14 days): {skillDashboard.attempts14d}</div>
+                  <div>Feedback acted upon: {skillDashboard.feedbackActed}</div>
+                  <div>
+                    Last attempt:{' '}
+                    {skillDashboard.lastAttemptAt
+                      ? new Date(skillDashboard.lastAttemptAt).toLocaleDateString('en-IN', {
+                        timeZone: 'Asia/Kolkata',
+                      })
+                      : '—'}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* ===== PROFILE STATS + FOLLOW ===== */}
             <div className="flex items-center gap-6 mt-4 text-sm">
@@ -2199,8 +2326,8 @@ async function getFollowingUserIds() {
               <button
                 onClick={toggleFollow}
                 className={`px-4 py-2 rounded text-sm border ${isFollowing
-                    ? 'bg-white text-black'
-                    : 'bg-black text-white'
+                  ? 'bg-white text-black'
+                  : 'bg-black text-white'
                   }`}
               >
                 {isFollowing ? 'Unfollow' : 'Follow'}

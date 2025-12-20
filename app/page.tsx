@@ -33,7 +33,7 @@ type Attempt = {
   caption?: string | null
 }
 
-type Comment = {
+type AppComment  = {
   id: string            // 👈 comment row id (uuid)
   user_id: string       // 👈 who wrote the comment
   attempt_id: string    // 👈 which video
@@ -156,7 +156,7 @@ export default function Home() {
   const [videoMeta, setVideoMeta] = useState<
     Record<string, { portrait: boolean; duration: number }>
   >({})
-  const [comments, setComments] = useState<Record<string, Comment[]>>({})
+  const [comments, setComments] = useState<Record<string, AppComment[]>>({})
   const [draftComments, setDraftComments] = useState<
     Record<string, { second: number; issue: string; suggestion: string }>
   >({})

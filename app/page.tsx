@@ -1672,6 +1672,25 @@ export default function Home() {
     </button>
   </div>
 )}
+{c.corrected_at && (
+  <div className="mt-2 ml-11 text-xs text-green-700">
+    <button
+      className="underline"
+      onClick={() => {
+        const correctedAttempt = feed.find(
+          a => a.parent_attempt_id === activeProfileAttempt.id
+        )
+
+        if (correctedAttempt) {
+          setActiveProfileAttempt(correctedAttempt)
+          setShowProfile(false)
+        }
+      }}
+    >
+      Correction attempted
+    </button>
+  </div>
+)}
 
 {/* 🔹 CORRECTION UPLOAD UI */}
 {correctionState?.commentId === c.id && (

@@ -78,6 +78,8 @@ export default function Home() {
     useState<'idle' | 'checking' | 'available' | 'taken'>('idle')
 
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null)
+  const [attemptCorrectionCommentId, setAttemptCorrectionCommentId] =
+    useState<string | null>(null)
   const [editDraft, setEditDraft] = useState<{
     second: number
     issue: string
@@ -881,6 +883,17 @@ export default function Home() {
 
       if (insertErr) throw insertErr
 
+
+      // 🔹 MARK COMMENT AS CORRECTION ATTEMPTED
+      if (attemptCorrectionCommentId) {
+        await supabase
+          .from('comments')
+          .update({ corrected_at: new Date().toISOString() })
+          .eq('id', attemptCorrectionCommentId)
+
+        setAttemptCorrectionCommentId(null)
+      }
+
       // 4️⃣ Reset UI
       setIsReAttempt(false)
       setReAttemptFile(null)
@@ -1512,6 +1525,7 @@ export default function Home() {
                   )}
                 </div>
 
+
                 {/* COMMENT CONTENT — HORIZONTAL */}
                 <div className="flex items-center gap-3 flex-wrap">
                   <span
@@ -1589,30 +1603,31 @@ export default function Home() {
                         Delete
                       </button>
                     )}
+
+                  {/* 🔹 ATTEMPT CORRECTION — ADD EXACTLY HERE */}
+          
                   {activeProfileAttempt.user_id === user.id && !c.corrected_at && (
-                    <button
-                      className="text-xs underline"
-                      onClick={async () => {
-                        await supabase
-                          .from('comments')
-                          .update({ corrected_at: new Date().toISOString() })
-                          .eq('id', c.id)
-                        // 🔁 START RE-ATTEMPT FLOW (SAME AS BUTTON)
-                        setOriginalAttempt(
-                          activeProfileAttempt.parent_attempt_id
-                            ? feed.find(a => a.id === activeProfileAttempt.parent_attempt_id) || activeProfileAttempt
-                            : activeProfileAttempt
-                        )
+                    <label className="text-xs underline cursor-pointer">
+                      Attempt correction
+                      <input
+                        type="file"
+                        accept="video/*"
+                        className="hidden"
+                        onChange={e => {
+                          const file = e.target.files?.[0]
+                          if (!file) return
 
-                        setIsReAttempt(true)
-                        setReAttemptFile(null)
+                          setAttemptCorrectionCommentId(c.id)
 
-                        fetchComments(activeProfileAttempt.id)
-                      }}
-                    >
-                      Correct
-                    </button>
+                          setOriginalAttempt(activeProfileAttempt)
+
+                          setReAttemptFile(file)
+                          setIsReAttempt(true)
+                        }}
+                      />
+                    </label>
                   )}
+
                   {!isGuest && c.user_id !== user.id && (
                     <button
                       className="text-xs underline disabled:opacity-50"

@@ -251,8 +251,7 @@ export default function Home() {
     }
 
     supabase.auth.getUser().then(({ data }) => {
-      // ⛔ BLOCK user hydration during recovery
-      if (data?.user && !isRecoveryFlow) {
+      if (data?.user && !isRecoveryFlow && user?.id !== 'guest') {
         setUser(data.user)
       }
     })
@@ -262,7 +261,9 @@ export default function Home() {
         // 🔹 BLOCK normal login flow during recovery
         if (type === 'recovery') return
         if (isRecoveryFlow) return
-        setUser(session?.user ?? null)
+        if (user?.id !== 'guest') {
+          setUser(session?.user ?? null)
+        }
 
         if (session?.user && session?.access_token) {
           if (authMode === 'verify_email') {
@@ -452,8 +453,8 @@ export default function Home() {
   }
   async function fetchComments(attemptId: string) {
     const res = await supabase
-  .from('comments')
-  .select(`
+      .from('comments')
+      .select(`
     *,
     profiles (
       id,
@@ -462,7 +463,7 @@ export default function Home() {
       avatar_url
     )
   `)
-  .eq('attempt_id', attemptId)
+      .eq('attempt_id', attemptId)
 
     console.log('FETCH COMMENTS RAW RESULT:', res)
 
@@ -481,7 +482,7 @@ export default function Home() {
     return Array.from({ length: duration }, (_, i) => i + 1)
   }
   // ===== FETCH USER UPLOADS (ADDED) =====
-  async function fetchUserUploads() {
+  async function fetchUserUploads(forUserId?: string) {
     if (!user || isGuest) return
 
     const { data, error } = await supabase
@@ -495,7 +496,7 @@ export default function Home() {
       community
     )
   `)
-      .eq('user_id', user.id)
+      .eq('user_id', forUserId ?? user.id)
       .eq('processing_status', 'done')
       .not('processed_video_url', 'is', null)
       .order('created_at', { ascending: false })
@@ -1458,6 +1459,24 @@ export default function Home() {
 
             </div>
           )}
+          {/* COMMENT CAPTION */}
+          {comments[activeProfileAttempt.id]?.length > 0 && (
+            <div className="text-sm text-gray-700 bg-white border rounded p-2">
+              <span className="font-medium">
+                {
+                  comments[activeProfileAttempt.id][
+                    comments[activeProfileAttempt.id].length - 1
+                  ].issue
+                }
+              </span>
+              {': '}
+              {
+                comments[activeProfileAttempt.id][
+                  comments[activeProfileAttempt.id].length - 1
+                ].suggestion
+              }
+            </div>
+          )}
           {/* ===== COMMENTS ===== */}
           <div className="mt-6 space-y-3">
             <div className="font-semibold text-sm">Comments</div>
@@ -1622,7 +1641,7 @@ export default function Home() {
           onClick={() => {
             // ✅ CLOSE VIDEO + RESET RE-ATTEMPT
             setActiveProfileAttempt(null)
-        
+
             setOriginalAttempt(null)
             setIsReAttempt(false)
             setReAttemptFile(null)
@@ -2078,6 +2097,7 @@ export default function Home() {
               key={attempt.id}
               className="bg-white border rounded-xl p-4"
             >
+
               {attempt.user_id === user.id && (
                 <button
                   className="text-xs text-red-600 underline float-right"
@@ -2098,6 +2118,7 @@ export default function Home() {
                     setViewedUserId(attempt.user_id)
                     setShowProfile(true)
                     setActiveProfileAttempt(null)
+                    fetchUserUploads(attempt.user_id)
                   }}
                 >
                   {feedProfiles[attempt.user_id]?.avatar_url && (

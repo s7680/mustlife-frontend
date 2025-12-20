@@ -141,6 +141,7 @@ const [editingHelpIntent, setEditingHelpIntent] = useState(false)
     setShowProfile(true)
     setActiveProfileAttempt(null)
     fetchProfile(userId)
+     fetchAllProfileComments(userId)
 
     // persist intent across refresh
     localStorage.setItem('mustlife:view', 'profile')
@@ -603,6 +604,34 @@ const [editingHelpIntent, setEditingHelpIntent] = useState(false)
       [attemptId]: res.data ?? [],
     }))
   }
+  async function fetchAllProfileComments(profileUserId: string) {
+  const { data: attempts } = await supabase
+    .from('attempts')
+    .select('id')
+    .eq('user_id', profileUserId)
+
+  if (!attempts || attempts.length === 0) return
+
+  const attemptIds = attempts.map(a => a.id)
+
+  const { data, error } = await supabase
+    .from('comments')
+    .select('*')
+    .in('attempt_id', attemptIds)
+
+  if (error) {
+    console.error('Profile comments fetch error:', error)
+    return
+  }
+
+  const grouped: Record<string, Comment[]> = {}
+  data.forEach(c => {
+    grouped[c.attempt_id] ??= []
+    grouped[c.attempt_id].push(c)
+  })
+
+  setComments(grouped)
+}
   function getTimestampOptions(attemptId: string) {
     const duration = videoMeta[attemptId]?.duration ?? 60
     return Array.from({ length: duration }, (_, i) => i + 1)
@@ -2314,30 +2343,61 @@ const [editingHelpIntent, setEditingHelpIntent] = useState(false)
     </div>
 
     {(() => {
-      const issueCount: Record<string, number> = {}
+  /**
+   * Structure:
+   * community -> skill -> issue -> count
+   */
+  const grouped: Record<
+    string,
+    Record<string, Record<string, number>>
+  > = {}
 
-      Object.values(comments).flat().forEach(c => {
-        issueCount[c.issue] = (issueCount[c.issue] || 0) + 1
-      })
+  Object.values(comments).flat().forEach(c => {
+    const attempt = feed.find(a => a.id === c.attempt_id)
+    if (!attempt) return
 
-      const sorted = Object.entries(issueCount)
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 3)
+    const skill = skills.find(s => s.id === attempt.skill_id)
+    if (!skill) return
 
-      if (sorted.length === 0) {
-        return <div className="text-xs text-gray-400">No feedback yet</div>
-      }
+    grouped[skill.community] ??= {}
+    grouped[skill.community][skill.name] ??= {}
+    grouped[skill.community][skill.name][c.issue] =
+      (grouped[skill.community][skill.name][c.issue] || 0) + 1
+  })
 
-      return (
-        <div className="text-xs text-gray-700 space-y-1">
-          {sorted.map(([issue, count]) => (
-            <div key={issue}>
-              • {issue} ({count})
-            </div>
-          ))}
+  const communities = Object.keys(grouped)
+  if (communities.length === 0) {
+    return <div className="text-xs text-gray-400">No feedback yet</div>
+  }
+
+  return (
+    <div className="text-xs space-y-3">
+      {communities.map(community => (
+        <div key={community}>
+          <div className="font-medium text-gray-800 mb-1">
+            {community}
+          </div>
+
+          <div className="pl-3 space-y-1">
+            {Object.entries(grouped[community]).map(
+              ([skillName, issues]) => {
+                const topIssue = Object.entries(issues).sort(
+                  (a, b) => b[1] - a[1]
+                )[0]
+
+                return (
+                  <div key={skillName} className="text-gray-700">
+                    {skillName}: {topIssue[0]} ({topIssue[1]})
+                  </div>
+                )
+              }
+            )}
+          </div>
         </div>
-      )
-    })()}
+      ))}
+    </div>
+  )
+})()}
   </div>
 
   {/* 2️⃣ ISSUES FIXED VS PENDING */}
@@ -2347,17 +2407,58 @@ const [editingHelpIntent, setEditingHelpIntent] = useState(false)
     </div>
 
     {(() => {
-      const allComments = Object.values(comments).flat()
-      const fixed = allComments.filter(c => c.corrected_at).length
-      const pending = allComments.length - fixed
+  /**
+   * community -> skill -> { fixed, pending }
+   */
+  const grouped: Record<
+    string,
+    Record<string, { fixed: number; pending: number }>
+  > = {}
 
-      return (
-        <div className="text-xs text-gray-700">
-          Fixed: <span className="font-medium">{fixed}</span> • Pending:{' '}
-          <span className="font-medium">{pending}</span>
+  Object.values(comments).flat().forEach(c => {
+    const attempt = feed.find(a => a.id === c.attempt_id)
+    if (!attempt) return
+
+    const skill = skills.find(s => s.id === attempt.skill_id)
+    if (!skill) return
+
+    grouped[skill.community] ??= {}
+    grouped[skill.community][skill.name] ??= { fixed: 0, pending: 0 }
+
+    if (c.corrected_at) {
+      grouped[skill.community][skill.name].fixed += 1
+    } else {
+      grouped[skill.community][skill.name].pending += 1
+    }
+  })
+
+  const communities = Object.keys(grouped)
+  if (communities.length === 0) {
+    return <div className="text-xs text-gray-400">No feedback yet</div>
+  }
+
+  return (
+    <div className="text-xs space-y-3">
+      {communities.map(community => (
+        <div key={community}>
+          <div className="font-medium text-gray-800 mb-1">
+            {community}
+          </div>
+
+          <div className="pl-3 space-y-1">
+            {Object.entries(grouped[community]).map(
+              ([skillName, stats]) => (
+                <div key={skillName} className="text-gray-700">
+                  {skillName}: Fixed {stats.fixed} • Pending {stats.pending}
+                </div>
+              )
+            )}
+          </div>
         </div>
-      )
-    })()}
+      ))}
+    </div>
+  )
+})()}
   </div>
 
   {/* 3️⃣ USER INTENT */}

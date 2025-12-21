@@ -4,6 +4,13 @@ export const dynamic = 'force-dynamic'
 import { useEffect, useState, useRef } from 'react'
 import Image from 'next/image'
 import { supabase } from '../lib/supabase'
+/* ===== IST DATE FORMATTER (GLOBAL) ===== */
+const formatIST = (date: string | Date, withTime = true) => {
+  return new Date(date).toLocaleString('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    ...(withTime ? {} : { hour: undefined, minute: undefined, second: undefined })
+  })
+}
 
 /* ================= TYPES ================= */
 type Profile = {
@@ -251,6 +258,9 @@ export default function Home() {
   const [editingBio, setEditingBio] = useState(false)
   const [profilePicUrl, setProfilePicUrl] = useState<string | null>(null)
   const [showPicModal, setShowPicModal] = useState(false)
+  // ===== NOTIFICATIONS (NEW) =====
+  const [notifications, setNotifications] = useState<any[]>([])
+  const [showNotifications, setShowNotifications] = useState(false)
   const [followers, setFollowers] = useState<string[]>([])
   const [followingCount, setFollowingCount] = useState(0)
   // ===== RE-ATTEMPT STATE =====
@@ -369,6 +379,7 @@ export default function Home() {
     if (view === 'profile' && pid) {
       openProfile(pid)
       fetchUserUploads(pid)
+      fetchNotifications()
     }
   }, [user, authLoading])
 
@@ -442,6 +453,18 @@ export default function Home() {
 
 
   /* ---------- FETCH ---------- */
+  async function fetchNotifications() {
+    if (!user || isGuest) return
+
+    const { data } = await supabase
+      .from('notifications')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(30)
+
+    setNotifications(data ?? [])
+  }
   async function fetchProfile(userId: string) {
     const { data } = await supabase
       .from('profiles')
@@ -1232,6 +1255,22 @@ export default function Home() {
           processing_status: 'pending',
           parent_attempt_id: originalAttempt.id // 🔗 IMPORTANT FOR FUTURE COMPARISON
         })
+      const commenters =
+        comments[originalAttempt.id]
+          ?.map(c => c.user_id)
+          .filter(uid => uid !== user.id) ?? []
+
+      if (commenters.length > 0) {
+        await supabase.from('notifications').insert(
+          commenters.map(uid => ({
+            user_id: uid,
+            actor_id: user.id,
+            type: 'reattempt',
+            attempt_id: originalAttempt.id,
+            message: 'User uploaded a re-attempt on a video you commented on',
+          }))
+        )
+      }
 
       if (insertErr) throw insertErr
 
@@ -1301,6 +1340,21 @@ export default function Home() {
         .from('comments')
         .update({ corrected_at: new Date().toISOString() })
         .eq('id', correctionState.commentId)
+      const correctedComment =
+        comments[activeProfileAttempt.id]?.find(
+          c => c.id === correctionState.commentId
+        )
+
+      if (correctedComment) {
+        await supabase.from('notifications').insert({
+          user_id: correctedComment.user_id,
+          actor_id: user.id,
+          type: 'correction_uploaded',
+          attempt_id: activeProfileAttempt.id,
+          comment_id: correctedComment.id,
+          message: 'User uploaded a correction based on your feedback',
+        })
+      }
       // 🔹 ADD: +5 impact to comment author
       const comment = comments[activeProfileAttempt.id]?.find(
         c => c.id === correctionState.commentId
@@ -1813,9 +1867,9 @@ export default function Home() {
                           suggestion: d.suggestion,
                         })
                         .select(`
-                 *,
-                     comment_likes(user_id)
-                    `)
+                           *,
+                         comment_likes(user_id)
+                         `)
                         .single()
 
                       if (error) {
@@ -1980,7 +2034,49 @@ export default function Home() {
                     )}
 
                     {/* ACTIONS */}
-                    <div className="flex gap-2 text-xs">
+                    <div className="flex gap-3 text-xs items-center">
+
+                      {/* 👍 LIKE */}
+                      <button
+                        className="underline"
+                        onClick={async () => {
+                          if (!requireAuth()) return
+
+                          // 1️⃣ insert like
+                          await supabase
+                            .from('comment_likes')
+                            .insert({
+                              user_id: user.id,
+                              comment_id: c.id,
+                            })
+
+                          // 2️⃣ 🔔 notifications
+                          await supabase.from('notifications').insert([
+                            {
+                              user_id: c.user_id,                    // comment author
+                              actor_id: user.id,
+                              type: 'comment_like',
+                              attempt_id: c.attempt_id,
+                              comment_id: c.id,
+                              message: 'Someone liked your suggestion',
+                            },
+                            {
+                              user_id: activeProfileAttempt.user_id, // video owner
+                              actor_id: user.id,
+                              type: 'comment_like',
+                              attempt_id: c.attempt_id,
+                              comment_id: c.id,
+                              message: 'Someone liked a suggestion on your video',
+                            },
+                          ])
+
+                          // 3️⃣ refresh comments (to update like count later)
+                          fetchComments(activeProfileAttempt.id)
+                        }}
+                      >
+                        👍 {c.comment_likes?.length ?? 0}
+                      </button>
+
                       {/* EDIT */}
                       {c.user_id === user.id && editingCommentId !== c.id && (
                         <button
@@ -2057,76 +2153,124 @@ export default function Home() {
                         Ask clarification
                       </button>
                     )}
+                  {clarifyingCommentId === c.id && (
+                    <div className="ml-11 mt-2 space-y-1 text-xs">
+                      <input
+                        className="border p-1 w-full"
+                        placeholder="Ask clarification (max 200 chars)"
+                        maxLength={200}
+                        value={clarificationDraft}
+                        onChange={e => setClarificationDraft(e.target.value)}
+                      />
+                      <button
+                        className="underline"
+                        onClick={async () => {
+                          if (!clarificationDraft.trim()) return
+
+                          await supabase
+                            .from('comments')
+                            .update({ clarification: clarificationDraft })
+                            .eq('id', c.id)
+
+                          // 🔔 NOTIFY COMMENT AUTHOR
+                          await supabase.from('notifications').insert({
+                            user_id: c.user_id,
+                            actor_id: user.id,
+                            type: 'clarification_request',
+                            attempt_id: c.attempt_id,
+                            comment_id: c.id,
+                            message: 'User asked for clarification on your suggestion',
+                          })
+
+                          setClarifyingCommentId(null)
+                          setClarificationDraft('')
+                          fetchComments(activeProfileAttempt.id)
+                        }}
+                      >
+                        Submit
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {/* ================= ROW 3 ================= */}
                 {/* ================= ROW 3 ================= */}
-{c.clarification && (
-  <div className="ml-11 mt-2 space-y-2 text-xs text-gray-700">
+                {c.clarification && (
+                  <div className="ml-11 mt-2 space-y-2 text-xs text-gray-700">
 
-    {/* USER CLARIFICATION */}
-    <div className="italic">
-      Clarification: {c.clarification}
-    </div>
+                    {/* USER CLARIFICATION */}
+                    <div className="italic">
+                      Clarification: {c.clarification}
+                    </div>
 
-    {/* COACH REPLY BUTTON */}
-    {viewerRole === 'coach' &&
-      c.user_id === user.id && // coach is comment author
-      !c.clarified_at && (
-        <button
-          className="underline"
-          onClick={() => {
-            setReplyingCommentId(c.id)
-            setReplyDraft('')
-          }}
-        >
-          Reply
-        </button>
-      )}
+                    {/* COACH REPLY BUTTON */}
+                    {viewerRole === 'coach' &&
+                      c.user_id === user.id && // coach is comment author
+                      !c.clarified_at && (
+                        <button
+                          className="underline"
+                          onClick={() => {
+                            setReplyingCommentId(c.id)
+                            setReplyDraft('')
+                          }}
+                        >
+                          Reply
+                        </button>
+                      )}
 
-    {/* COACH REPLY INPUT */}
-    {replyingCommentId === c.id && !c.clarified_at && (
-      <div className="space-y-1">
-        <input
-          className="border p-1 w-full"
-          placeholder="Reply to clarification (max 200 chars)"
-          maxLength={200}
-          value={replyDraft}
-          onChange={e => setReplyDraft(e.target.value)}
-        />
+                    {/* COACH REPLY INPUT */}
+                    {replyingCommentId === c.id && !c.clarified_at && (
+                      <div className="space-y-1">
+                        <input
+                          className="border p-1 w-full"
+                          placeholder="Reply to clarification (max 200 chars)"
+                          maxLength={200}
+                          value={replyDraft}
+                          onChange={e => setReplyDraft(e.target.value)}
+                        />
 
-        <button
-          className="underline"
-          onClick={async () => {
-            if (!replyDraft.trim()) return
+                        <button
+                          className="underline"
+                          onClick={async () => {
+                            if (!replyDraft.trim()) return
 
-            await supabase
-              .from('comments')
-              .update({
-                suggestion: replyDraft,          // overwrite suggestion
-                clarified_by: user.id,
-                clarified_at: new Date().toISOString(),
-              })
-              .eq('id', c.id)
+                            await supabase
+                              .from('comments')
+                              .update({
+                                suggestion: replyDraft,          // overwrite suggestion
+                                clarified_by: user.id,
+                                clarified_at: new Date().toISOString(),
+                              })
+                              .eq('id', c.id)
+                            await supabase.from('notifications').insert({
+                              user_id: activeProfileAttempt.user_id,
+                              actor_id: user.id,
+                              type: 'clarification_reply',
+                              attempt_id: c.attempt_id,
+                              comment_id: c.id,
+                              message: 'Coach replied to your clarification request',
+                            })
 
-            setReplyingCommentId(null)
-            setReplyDraft('')
-            fetchComments(activeProfileAttempt.id)
-          }}
-        >
-          Submit reply
-        </button>
-      </div>
-    )}
+                            setReplyingCommentId(null)
+                            setReplyDraft('')
+                            fetchComments(activeProfileAttempt.id)
+                          }}
+                        >
+                          Submit reply
+                        </button>
 
-    {/* FINAL COACH REPLY (READ-ONLY) */}
-    {c.clarified_at && (
-      <div className="text-gray-800">
-        Coach reply: {c.suggestion}
-      </div>
-    )}
-  </div>
-)}
+
+                      </div>
+                    )}
+
+                    {/* FINAL COACH REPLY (READ-ONLY) */}
+                    {c.clarified_at && (
+                      <div className="text-gray-800">
+                        Coach reply: {c.suggestion}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -2179,6 +2323,67 @@ export default function Home() {
         >
           Profile
         </button>
+        {/* 🔔 NOTIFICATIONS */}
+        <div className="relative">
+          <button
+            className="text-sm underline cursor-pointer hover:text-black transition"
+            onClick={() => {
+              setShowNotifications(v => !v)
+              fetchNotifications()
+            }}
+          >
+            🔔
+            {notifications.some(n => !n.read_at) && (
+              <span className="ml-1 text-xs text-red-600">●</span>
+            )}
+          </button>
+
+          {showNotifications && (
+            <div className="absolute right-0 mt-2 w-80 bg-white border rounded-xl shadow-lg z-50 max-h-[400px] overflow-y-auto">
+              {notifications.length === 0 && (
+                <div className="p-4 text-sm text-gray-500">
+                  No notifications
+                </div>
+              )}
+
+              {notifications.map(n => (
+                <div
+                  key={n.id}
+                  className={`p-3 text-sm border-b cursor-pointer hover:bg-gray-50
+            ${!n.read_at ? 'bg-gray-50' : ''}
+          `}
+                  onClick={async () => {
+                    await supabase
+                      .from('notifications')
+                      .update({ read_at: new Date().toISOString() })
+                      .eq('id', n.id)
+
+                    setShowNotifications(false)
+
+                    if (n.attempt_id) {
+                      const { data: attempt } = await supabase
+                        .from('attempts')
+                        .select('*')
+                        .eq('id', n.attempt_id)
+                        .single()
+
+                      if (attempt) {
+                        setActiveProfileAttempt(attempt)
+                        setShowProfile(false)
+                      }
+                    }
+                  }}
+                >
+                  {n.message}
+                  <div className="text-xs text-gray-400 mt-1">
+                    {formatIST(n.created_at)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         <button
           onClick={logout}
           className="text-sm underline cursor-pointer hover:text-black transition"
@@ -2650,9 +2855,7 @@ export default function Home() {
                   <div>
                     Last attempt:{' '}
                     {skillDashboard.lastAttemptAt
-                      ? new Date(skillDashboard.lastAttemptAt).toLocaleDateString('en-IN', {
-                        timeZone: 'Asia/Kolkata',
-                      })
+                      ? formatIST(skillDashboard.lastAttemptAt, false)
                       : '—'}
                   </div>
                 </div>
@@ -2707,7 +2910,7 @@ export default function Home() {
                         return (
                           <div className="text-xs text-gray-700">
                             {corrected
-                              ? new Date(corrected.corrected_at!).toLocaleDateString('en-IN')
+                              ? formatIST(corrected.corrected_at!, false)
                               : 'No corrections yet'}
                           </div>
                         )
@@ -2917,7 +3120,7 @@ export default function Home() {
                               muted
                             />
                             <div className="text-[10px] text-gray-500 text-center mt-1">
-                              {new Date(v.created_at).toLocaleDateString()}
+                              {formatIST(v.created_at, false)}
                             </div>
                           </div>
                         ))}
@@ -3147,9 +3350,7 @@ export default function Home() {
                     </div>
                   </div>
                   <div className="text-[11px] text-gray-400">
-                    {new Date(attempt.created_at).toLocaleString('en-IN', {
-                      timeZone: 'Asia/Kolkata',
-                    })}
+                    {formatIST(attempt.created_at)}
                   </div>
                 </div>
 

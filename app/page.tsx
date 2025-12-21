@@ -2364,9 +2364,8 @@ export default function Home() {
         <button
           className="text-sm underline cursor-pointer hover:text-black transition"
           onClick={() => {
-            // placeholder for now
-            alert('Issue explanations coming next')
-          }}
+  window.location.href = '/issues'
+}}
         >
           Issues
         </button>

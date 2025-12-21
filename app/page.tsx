@@ -2360,7 +2360,16 @@ export default function Home() {
             </span>
           </div>
         </div>
-
+        {/* 🧠 ISSUES BUTTON (NEW) */}
+        <button
+          className="text-sm underline cursor-pointer hover:text-black transition"
+          onClick={() => {
+            // placeholder for now
+            alert('Issue explanations coming next')
+          }}
+        >
+          Issues
+        </button>
 
         {/* ===== PROFILE BUTTON (ADDED) ===== */}
         <button

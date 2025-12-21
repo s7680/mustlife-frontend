@@ -1452,7 +1452,7 @@ export default function Home() {
               </p>
 
               <button
-              className="w-full border border-black py-2 rounded-lg mb-4
+                className="w-full border border-black py-2 rounded-lg mb-4
              hover:bg-gray-100 transition"
                 onClick={() => setAuthMode('verify_email')}
               >
@@ -1854,10 +1854,10 @@ export default function Home() {
                   <button
                     className="text-xs underline cursor-pointer hover:text-black transition"
                     onClick={async () => {
-                     if (!requireAuth()) return
+                      if (!requireAuth()) return
 
-  const d = draftComments[activeProfileAttempt.id]
-  if (!d.issue || !d.suggestion) return
+                      const d = draftComments[activeProfileAttempt.id]
+                      if (!d.issue || !d.suggestion) return
 
                       const { data: newComment, error } = await supabase
                         .from('comments')
@@ -2053,14 +2053,14 @@ export default function Home() {
                       <button
                         className="underline"
                         onClick={async () => {
-                            if (!requireAuth()) return
+                          if (!requireAuth()) return
 
-  await supabase
-    .from('comment_likes')
-    .insert({
-      user_id: user.id,
-      comment_id: c.id,
-    })
+                          await supabase
+                            .from('comment_likes')
+                            .insert({
+                              user_id: user.id,
+                              comment_id: c.id,
+                            })
 
                           await supabase.from('notifications').insert([
                             {
@@ -2199,10 +2199,10 @@ export default function Home() {
                       <button
                         className="underline"
                         onClick={() => {
-  if (!requireAuth()) return
-  setClarifyingCommentId(c.id)
-  setClarificationDraft('')
-}}
+                          if (!requireAuth()) return
+                          setClarifyingCommentId(c.id)
+                          setClarificationDraft('')
+                        }}
                       >
                         Ask clarification
                       </button>
@@ -2337,7 +2337,7 @@ export default function Home() {
           <span className="font-semibold text-lg">MUST_Life</span>
           <div
             className="relative group cursor-pointer text-sm hover:text-black transition"
-            
+
             onClick={() => {
               localStorage.removeItem('mustlife:view')
               localStorage.removeItem('mustlife:profileUserId')
@@ -2467,11 +2467,11 @@ export default function Home() {
               <div
                 className="relative w-16 h-16 rounded-full overflow-hidden bg-gray-200 cursor-pointer flex items-center justify-center"
                 onClick={() => {
-  if (isGuest) return
-  if (user?.id === profileUserId && profilePicUrl) {
-    setShowPicModal(true)
-  }
-}}
+                  if (isGuest) return
+                  if (user?.id === profileUserId && profilePicUrl) {
+                    setShowPicModal(true)
+                  }
+                }}
               >
                 {profilePicUrl ? (
                   <img
@@ -2633,9 +2633,9 @@ export default function Home() {
                     ${isOwnProfile ? 'cursor-pointer hover:bg-gray-50 transition' : ''}
                      `}
                     onClick={() => {
-  if (isGuest) return
-  isOwnProfile && setEditingBio(true)
-}}
+                      if (isGuest) return
+                      isOwnProfile && setEditingBio(true)
+                    }}
                   >
                     {bio || 'Write about yourself (max 200 words)'}
                   </div>
@@ -3019,9 +3019,9 @@ export default function Home() {
             {user?.id !== profileUserId && (
               <button
                 onClick={() => {
-  if (!requireAuth()) return
-  toggleFollow()
-}}
+                  if (!requireAuth()) return
+                  toggleFollow()
+                }}
                 className={`px-4 py-2 rounded text-sm border cursor-pointer transition
   ${isFollowing
                     ? 'bg-white text-black hover:bg-gray-100'

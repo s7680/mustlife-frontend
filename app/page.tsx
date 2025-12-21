@@ -1888,6 +1888,17 @@ export default function Home() {
                           ],
                         }))
                       }
+                      // 🔔 NOTIFY VIDEO OWNER (ONLY IF DIFFERENT USER)
+                      if (activeProfileAttempt.user_id !== user.id) {
+                        await supabase.from('notifications').insert({
+                          user_id: activeProfileAttempt.user_id,
+                          actor_id: user.id,
+                          type: 'new_comment',
+                          attempt_id: activeProfileAttempt.id,
+                          comment_id: newComment.id,
+                          message: `${feedProfiles[user.id]?.username ?? 'Someone'} commented on your video`,
+                        })
+                      }
 
 
                     }}

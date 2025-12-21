@@ -560,23 +560,23 @@ export default function Home() {
       .not('processed_video_url', 'is', null)
 
     // ✅ SKILL FILTER (MULTI)
-   let skillIdsToUse: string[] = []
+    let skillIdsToUse: string[] = []
 
-if (filterCommunities.length > 0) {
-  skillIdsToUse = skills
-    .filter(s => filterCommunities.includes(s.community))
-    .map(s => s.id)
-}
+    if (filterCommunities.length > 0) {
+      skillIdsToUse = skills
+        .filter(s => filterCommunities.includes(s.community))
+        .map(s => s.id)
+    }
 
-if (filterSkills.length > 0) {
-  skillIdsToUse = skillIdsToUse.length > 0
-    ? skillIdsToUse.filter(id => filterSkills.includes(id))
-    : filterSkills
-}
+    if (filterSkills.length > 0) {
+      skillIdsToUse = skillIdsToUse.length > 0
+        ? skillIdsToUse.filter(id => filterSkills.includes(id))
+        : filterSkills
+    }
 
-if (skillIdsToUse.length > 0) {
-  q = q.in('skill_id', skillIdsToUse)
-}
+    if (skillIdsToUse.length > 0) {
+      q = q.in('skill_id', skillIdsToUse)
+    }
 
     // 🔹 MINIMAL RELEVANCE LOGIC
     if (filterType === 'relevance') {
@@ -606,17 +606,7 @@ if (skillIdsToUse.length > 0) {
     let filtered = data ?? []
 
 
-    // ✅ ISSUE FILTER (POST QUERY)
-    if (filterIssues.length > 0 && Object.keys(comments).length > 0) {
-      const allowedAttemptIds = Object.values(comments)
-        .flat()
-        .filter(c => filterIssues.includes(c.issue))
-        .map(c => c.attempt_id)
 
-      filtered = filtered.filter(a =>
-        allowedAttemptIds.includes(a.id)
-      )
-    }
 
     setFeed(filtered)
     const userIds = [...new Set(filtered.map(a => a.user_id))]
@@ -1610,7 +1600,7 @@ if (skillIdsToUse.length > 0) {
   /* ================= HOME ================= */
 
   return (
-    <main className="min-h-screen bg-[#FBF6EC] text-black">
+    <main className="min-h-screen bg-[#FBF6EC] text-black [&_button]:cursor-pointer">
       {activeProfileAttempt && !showProfile && (
         <div className="max-w-6xl mx-auto p-6 space-y-4">
 
@@ -1695,7 +1685,7 @@ if (skillIdsToUse.length > 0) {
 
               {activeProfileAttempt.user_id === user.id && (
                 <button
-                  className="mt-2 text-xs text-red-600 underline"
+                  className="mt-2 text-xs text-red-600 underline cursor-pointer hover:text-red-700 transition"
                   onClick={() => deleteAttempt(activeProfileAttempt.id)}
                 >
                   Delete this video
@@ -1786,7 +1776,7 @@ if (skillIdsToUse.length > 0) {
 
                   {/* POST */}
                   <button
-                    className="text-xs underline"
+                    className="text-xs underline cursor-pointer hover:text-black transition"
                     onClick={async () => {
                       if (!requireAuth()) return
 
@@ -1911,7 +1901,8 @@ if (skillIdsToUse.length > 0) {
               >
                 {/* PROFILE PIC */}
                 <div
-                  className="w-8 h-8 rounded-full bg-gray-300 overflow-hidden flex-shrink-0 cursor-pointer"
+                  className="w-8 h-8 rounded-full bg-gray-300 overflow-hidden flex-shrink-0
+             cursor-pointer hover:opacity-80 transition"
                   onClick={() => {
                     openProfile(c.profiles?.id!)
                   }}
@@ -1928,7 +1919,8 @@ if (skillIdsToUse.length > 0) {
                 {/* COMMENT CONTENT — HORIZONTAL */}
                 <div className="flex flex-col gap-2">
                   <span
-                    className="font-medium cursor-pointer hover:underline whitespace-nowrap"
+                    className="font-medium cursor-pointer hover:underline hover:text-black
+             whitespace-nowrap transition"
                     onClick={() => {
                       openProfile(c.profiles?.id!)
                     }}
@@ -1939,7 +1931,8 @@ if (skillIdsToUse.length > 0) {
                   {/* TIMESTAMP */}
                   <button
                     type="button"
-                    className="text-xs text-gray-500 underline whitespace-nowrap cursor-pointer text-left"
+                    className="text-xs text-gray-500 underline whitespace-nowrap cursor-pointer text-left
+             hover:text-black transition"
                     onClick={() => seekActiveVideo(c.second)}
                   >
                     {c.second === 0 ? 'Overall' : `${c.second}s`}
@@ -1976,7 +1969,7 @@ if (skillIdsToUse.length > 0) {
                     c.user_id !== user.id &&
                     !c.clarification && (
                       <button
-                        className="text-xs underline ml-2"
+                        className="text-xs underline ml-2 cursor-pointer hover:text-black transition"
                         onClick={() => {
                           setClarifyingCommentId(c.id)
                           setClarificationDraft('')
@@ -2032,7 +2025,7 @@ if (skillIdsToUse.length > 0) {
                     c.clarification &&
                     !c.clarified_at && (
                       <button
-                        className="text-xs underline ml-2"
+                        className="text-xs underline ml-2 cursor-pointer hover:text-black transition"
                         onClick={() => {
                           setReplyingCommentId(c.id)
                           setReplyDraft('')
@@ -2212,7 +2205,7 @@ if (skillIdsToUse.length > 0) {
         <div className="flex items-center gap-3">
           <span className="font-semibold text-lg">MUST_Life</span>
           <div
-            className="relative group cursor-pointer text-sm"
+            className="relative group cursor-pointer text-sm hover:text-black transition"
             onClick={() => {
               localStorage.removeItem('mustlife:view')
               localStorage.removeItem('mustlife:profileUserId')
@@ -2250,11 +2243,14 @@ if (skillIdsToUse.length > 0) {
             openProfile(user.id)
             fetchUserUploads(user.id)
           }}
-          className="text-sm underline mr-4"
+          className="text-sm underline mr-4 cursor-pointer hover:text-black transition"
         >
           Profile
         </button>
-        <button onClick={logout} className="text-sm underline">
+        <button
+          onClick={logout}
+          className="text-sm underline cursor-pointer hover:text-black transition"
+        >
           Logout
         </button>
       </header>
@@ -2527,8 +2523,9 @@ if (skillIdsToUse.length > 0) {
                   />
                 ) : (
                   <div
-                    className={`border rounded p-2 bg-white whitespace-pre-wrap ${isOwnProfile ? 'cursor-pointer' : ''
-                      }`}
+                    className={`border rounded p-2 bg-white whitespace-pre-wrap
+  ${isOwnProfile ? 'cursor-pointer hover:bg-gray-50 transition' : ''}
+`}
                     onClick={() => isOwnProfile && setEditingBio(true)}
                   >
                     {bio || 'Write about yourself (max 200 words)'}
@@ -2736,7 +2733,8 @@ if (skillIdsToUse.length > 0) {
               <div className="border rounded-lg bg-gray-50">
                 {/* HEADER */}
                 <button
-                  className="w-full flex items-center justify-between p-4 text-sm font-semibold"
+                  className="w-full flex items-center justify-between p-4 text-sm font-semibold
+           cursor-pointer hover:bg-gray-100 transition"
                   onClick={() => setShowCoachScan(v => !v)}
                 >
                   <span>Coach quick scan</span>
@@ -2816,10 +2814,11 @@ if (skillIdsToUse.length > 0) {
             {user?.id !== profileUserId && (
               <button
                 onClick={toggleFollow}
-                className={`px-4 py-2 rounded text-sm border ${isFollowing
-                  ? 'bg-white text-black'
-                  : 'bg-black text-white'
-                  }`}
+                className={`px-4 py-2 rounded text-sm border cursor-pointer transition
+  ${isFollowing
+                    ? 'bg-white text-black hover:bg-gray-100'
+                    : 'bg-black text-white hover:bg-gray-800'}
+`}
               >
                 {isFollowing ? 'Unfollow' : 'Follow'}
               </button>
@@ -2886,7 +2885,9 @@ if (skillIdsToUse.length > 0) {
 
                     <div className="space-y-2">
                       <button
-                        className={`text-xs underline mb-3 ${includeCaption ? 'text-green-600' : ''}`}
+                        className={`text-xs underline mb-3 cursor-pointer hover:text-black transition
+  ${includeCaption ? 'text-green-600' : ''}
+`}
                         onClick={() => setIncludeCaption(true)}
                       >
                         Include text
@@ -3003,7 +3004,7 @@ if (skillIdsToUse.length > 0) {
         <div className="max-w-5xl mx-auto px-6 pt-6">
           <div className="bg-white border rounded-xl p-4 flex flex-wrap gap-3 items-center">
             <button
-              className="text-sm underline"
+              className="text-sm underline cursor-pointer hover:text-black transition"
               onClick={() => setShowFilters(v => !v)}
             >
               {filterApplied ? 'Filter applied' : 'Filter'}
@@ -3034,6 +3035,7 @@ if (skillIdsToUse.length > 0) {
                   ))}
                 </div>
 
+
                 <div className="space-y-1">
                   <div className="text-xs text-gray-500">Skill</div>
 
@@ -3059,34 +3061,37 @@ if (skillIdsToUse.length > 0) {
                       </label>
                     ))}
                 </div>
-                <div className="space-y-1">
-                  <div className="text-xs text-gray-500">Issue</div>
 
-                  {Array.from(
-                    new Set(
-                      Object.entries(skillIssues)
-                        .filter(([skillId]) =>
-                          filterSkills.length === 0 || filterSkills.includes(skillId)
-                        )
-                        .flatMap(([, issues]) => issues)
-                    )
-                  ).map(issue => (
-                    <label key={issue} className="flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={filterIssues.includes(issue)}
-                        onChange={() =>
-                          setFilterIssues(prev =>
-                            prev.includes(issue)
-                              ? prev.filter(x => x !== issue)
-                              : [...prev, issue]
+                {false && (
+                  <div className="space-y-1">
+                    <div className="text-xs text-gray-500">Issue</div>
+
+                    {Array.from(
+                      new Set(
+                        Object.entries(skillIssues)
+                          .filter(([skillId]) =>
+                            filterSkills.length === 0 || filterSkills.includes(skillId)
                           )
-                        }
-                      />
-                      {issue}
-                    </label>
-                  ))}
-                </div>
+                          .flatMap(([, issues]) => issues)
+                      )
+                    ).map(issue => (
+                      <label key={issue} className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={filterIssues.includes(issue)}
+                          onChange={() =>
+                            setFilterIssues(prev =>
+                              prev.includes(issue)
+                                ? prev.filter(x => x !== issue)
+                                : [...prev, issue]
+                            )
+                          }
+                        />
+                        {issue}
+                      </label>
+                    ))}
+                  </div>
+                )}
 
                 {/* 3️⃣ FILTER TYPE */}
                 <select
@@ -3104,9 +3109,11 @@ if (skillIdsToUse.length > 0) {
 
                 {/* 4️⃣ APPLY BUTTON */}
                 <button
-                  className={`px-4 py-2 text-sm rounded border
-      ${filterApplied ? 'bg-black text-white' : 'bg-white'}
-    `}
+                  className={`px-4 py-2 text-sm rounded border cursor-pointer transition
+    ${filterApplied
+                      ? 'bg-black text-white'
+                      : 'bg-white hover:bg-gray-100'}
+  `}
                   onClick={applyHomeFilter}
                 >
                   Apply filter
@@ -3185,7 +3192,7 @@ if (skillIdsToUse.length > 0) {
 
                 {/* VIDEO (UNCHANGED BEHAVIOR) */}
                 <div
-                  className="cursor-pointer"
+                  className="cursor-pointer hover:bg-gray-50 transition rounded"
                   onClick={() => {
                     setActiveProfileAttempt(attempt)
                     setShowProfile(false)
@@ -3254,14 +3261,14 @@ if (skillIdsToUse.length > 0) {
               </label>
 
               <button
-                className="w-full text-sm underline"
+                className="w-full text-sm underline cursor-pointer hover:text-black transition"
                 onClick={deleteProfilePicture}
               >
                 Delete profile picture
               </button>
 
               <button
-                className="w-full text-sm underline"
+                className="w-full text-sm underline cursor-pointer hover:text-black transition"
                 onClick={() => setShowPicModal(false)}
               >
                 Close

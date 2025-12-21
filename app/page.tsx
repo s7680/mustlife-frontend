@@ -1396,7 +1396,7 @@ export default function Home() {
 
   if (!user) {
     return (
-      <main className="min-h-screen flex bg-[#FBF6EC] text-black">
+      <main className="min-h-screen flex bg-[#FBF6EC] text-black [&_button]:cursor-pointer">
         <section className="hidden md:flex w-1/2 relative">
           <Image src="/activities3.jpg" alt="Activities" fill className="object-contain" />
           <div className="absolute inset-0 bg-black/40 p-12 flex flex-col justify-center">
@@ -1439,7 +1439,8 @@ export default function Home() {
               )}
 
               <button
-                className="w-full bg-black text-white py-2 rounded-lg mb-3"
+                className="w-full bg-black text-white py-2 rounded-lg mb-3
+             hover:bg-gray-800 transition"
                 onClick={loginWithPassword}
               >
                 Login
@@ -1451,20 +1452,20 @@ export default function Home() {
               </p>
 
               <button
-                className="w-full border border-black py-2 rounded-lg mb-4"
+              className="w-full border border-black py-2 rounded-lg mb-4
+             hover:bg-gray-100 transition"
                 onClick={() => setAuthMode('verify_email')}
               >
                 Create account
               </button>
 
               <div className="flex justify-between text-sm">
-                <button
-                  className="underline"
+                <button className="underline hover:text-black transition"
                   onClick={() => setAuthMode('forgot_password')}
                 >
                   Forgot password?
                 </button>
-                <button className="underline" onClick={continueAsGuest}>
+                <button className="underline hover:text-black transition" onClick={continueAsGuest}>
                   Continue as guest
                 </button>
               </div>

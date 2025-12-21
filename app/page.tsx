@@ -1914,309 +1914,160 @@ export default function Home() {
               </div>
             )}
 
-            {(comments[activeProfileAttempt.id] ?? []).map(c => (
-              <div
-                key={c.id}
-                className="border rounded p-2 text-sm bg-white flex items-start gap-3"
-              >
-                {/* PROFILE PIC */}
-                <div
-                  className="w-8 h-8 rounded-full bg-gray-300 overflow-hidden flex-shrink-0
-             cursor-pointer hover:opacity-80 transition"
-                  onClick={() => {
-                    openProfile(c.profiles?.id!)
-                  }}
-                >
-                  {c.profiles?.avatar_url && (
-                    <img
-                      src={c.profiles.avatar_url}
-                      className="w-full h-full object-cover"
-                    />
-                  )}
-                </div>
+           {(comments[activeProfileAttempt.id] ?? []).map(c => (
+  <div
+    key={c.id}
+    className="border rounded p-2 text-sm bg-white"
+  >
+    {/* ================= ROW 1 ================= */}
+    <div className="flex items-start gap-3 flex-wrap">
 
+      {/* AVATAR */}
+      <div
+        className="w-8 h-8 rounded-full bg-gray-300 overflow-hidden flex-shrink-0
+        cursor-pointer hover:opacity-80 transition"
+        onClick={() => openProfile(c.profiles?.id!)}
+      >
+        {c.profiles?.avatar_url && (
+          <img
+            src={c.profiles.avatar_url}
+            className="w-full h-full object-cover"
+          />
+        )}
+      </div>
 
-                {/* COMMENT CONTENT — HORIZONTAL */}
-                <div className="flex flex-col gap-2">
-                  <span
-                    className="font-medium cursor-pointer hover:underline hover:text-black
-             whitespace-nowrap transition"
-                    onClick={() => {
-                      openProfile(c.profiles?.id!)
-                    }}
-                  >
-                    {c.profiles?.display_name || c.profiles?.username || 'User'}
-                  </span>
+      {/* ROW 1 CONTENT */}
+      <div className="flex-1 flex flex-wrap items-center gap-x-3 gap-y-1">
 
-                  {/* TIMESTAMP */}
-                  <button
-                    type="button"
-                    className="text-xs text-gray-500 underline whitespace-nowrap cursor-pointer text-left
-             hover:text-black transition"
-                    onClick={() => seekActiveVideo(c.second)}
-                  >
-                    {c.second === 0 ? 'Overall' : `${c.second}s`}
-                  </button>
-                  {/* ISSUE */}
-                  <span className="font-medium whitespace-nowrap">
-                    {c.issue}
-                  </span>
+        {/* NAME */}
+        <span
+          className="font-medium cursor-pointer hover:underline"
+          onClick={() => openProfile(c.profiles?.id!)}
+        >
+          {c.profiles?.display_name || c.profiles?.username || 'User'}
+        </span>
 
-                  {/* SUGGESTION */}
-                  {editingCommentId === c.id ? (
-                    <input
-                      className="border p-1 text-sm"
-                      value={editDraft.suggestion}
-                      onChange={e =>
-                        setEditDraft(prev => ({ ...prev, suggestion: e.target.value }))
-                      }
-                    />
-                  ) : (
-                    <span className="text-gray-700">
-                      {c.suggestion}
-                    </span>
-                  )}
+        {/* TIMESTAMP */}
+        <button
+          className="text-xs text-gray-500 underline"
+          onClick={() => seekActiveVideo(c.second)}
+        >
+          {c.second === 0 ? 'Overall' : `${c.second}s`}
+        </button>
 
-                  {c.clarification && (
-                    <div className="mt-1 text-xs text-gray-600 italic">
-                      Clarification: {c.clarification}
-                    </div>
-                  )}
+        {/* ISSUE */}
+        <span className="text-xs font-medium bg-gray-100 px-2 py-0.5 rounded">
+          {c.issue}
+        </span>
 
+        {/* SUGGESTION */}
+        {/* SUGGESTION */}
+{editingCommentId === c.id ? (
+  <input
+    className="border px-2 py-1 text-sm w-full max-w-md"
+    value={editDraft.suggestion}
+    onChange={e =>
+      setEditDraft(prev => ({
+        ...prev,
+        suggestion: e.target.value,
+      }))
+    }
+  />
+) : (
+  <span className="text-gray-700">
+    {c.suggestion}
+  </span>
+)}
 
-                  {/* ===== USER CLARIFICATION (ONE TIME) ===== */}
-                  {activeProfileAttempt.user_id === user.id &&
-                    c.user_id !== user.id &&
-                    !c.clarification && (
-                      <button
-                        className="text-xs underline ml-2 cursor-pointer hover:text-black transition"
-                        onClick={() => {
-                          setClarifyingCommentId(c.id)
-                          setClarificationDraft('')
-                        }}
-                      >
-                        Ask clarification
-                      </button>
-                    )}
+        {/* ACTIONS */}
+        <div className="flex gap-2 text-xs">
+          {c.user_id === user.id && editingCommentId !== c.id && (
+  <button
+    className="underline"
+    onClick={() => {
+      setEditingCommentId(c.id)
+      setEditDraft({
+        second: c.second,
+        issue: c.issue,
+        suggestion: c.suggestion,
+      })
+    }}
+  >
+    Edit
+  </button>
+)}
 
-                  {clarifyingCommentId === c.id &&
-                    activeProfileAttempt.user_id === user.id &&
-                    (
-                      <div className="mt-2 space-y-1 text-xs">
-                        <input
-                          className="border p-1 w-full"
-                          placeholder="Ask clarification (max 200 chars)"
-                          maxLength={200}
-                          value={clarificationDraft}
-                          onChange={e => setClarificationDraft(e.target.value)}
-                        />
-                        <button
-                          className="underline"
-                          onClick={async () => {
-                            const text = clarificationDraft
+{c.user_id === user.id && editingCommentId !== c.id && (
+  <button
+    className="underline"
+    onClick={async () => {
+      await supabase
+        .from('comments')
+        .update({ suggestion: editDraft.suggestion })
+        .eq('id', c.id)
 
-                            await supabase
-                              .from('comments')
-                              .update({
-                                clarification: text,
-                              })
-                              .eq('id', c.id)
+      setEditingCommentId(null)
+      fetchComments(activeProfileAttempt.id)
+    }}
+  >
+    Save
+  </button>
+)}
 
-                            // ✅ ONLY LOCAL STATE UPDATE
-                            setComments(prev => ({
-                              ...prev,
-                              [activeProfileAttempt.id]: prev[activeProfileAttempt.id].map(x =>
-                                x.id === c.id
-                                  ? { ...x, clarification: text }
-                                  : x
-                              ),
-                            }))
+          {(c.user_id === user.id ||
+            activeProfileAttempt.user_id === user.id) && (
+            <button
+              className="underline text-red-600"
+              onClick={() => deleteComment(c.id)}
+            >
+              Delete
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
 
-                            setClarifyingCommentId(null)
-                          }}
-                        >
-                          Send
-                        </button>
-                      </div>
-                    )}
-                  {/* ===== COACH FINAL CLARIFICATION ===== */}
-                  {viewerRole === 'coach' &&
-                    c.user_id === user.id &&
-                    c.clarification &&
-                    !c.clarified_at && (
-                      <button
-                        className="text-xs underline ml-2 cursor-pointer hover:text-black transition"
-                        onClick={() => {
-                          setReplyingCommentId(c.id)
-                          setReplyDraft('')
-                        }}
-                      >
-                        Reply
-                      </button>
-                    )}
-                  {replyingCommentId === c.id &&
-                    viewerRole === 'coach' &&
-                    c.clarification &&
-                    !c.clarified_at && (
-                      <div className="mt-2 space-y-1 text-xs">
-                        <textarea
-                          className="border p-1 w-full"
-                          placeholder="Reply to clarification (max 200 chars)"
-                          maxLength={200}
-                          value={replyDraft}
-                          onChange={e => setReplyDraft(e.target.value)}
-                        />
-                        <button
-                          className="underline"
-                          onClick={async () => {
-                            const text = replyDraft
+    {/* ================= ROW 2 ================= */}
+    <div className="ml-11 mt-2 flex gap-6 text-xs">
 
-                            await supabase
-                              .from('comments')
-                              .update({
-                                suggestion: text,
-                                clarified_by: user.id,
-                                clarified_at: new Date().toISOString(),
-                              })
-                              .eq('id', c.id)
+      {activeProfileAttempt.user_id === user.id && !c.corrected_at && (
+        <button
+          className="underline"
+          onClick={() =>
+            setCorrectionState({ commentId: c.id, file: null })
+          }
+        >
+          Attempt correction
+        </button>
+      )}
 
-                            // ✅ local state update ONLY
-                            setComments(prev => ({
-                              ...prev,
-                              [activeProfileAttempt.id]: prev[activeProfileAttempt.id].map(x =>
-                                x.id === c.id
-                                  ? {
-                                    ...x,
-                                    suggestion: text,
-                                    clarified_by: user.id,
-                                    clarified_at: new Date().toISOString(),
-                                  }
-                                  : x
-                              ),
-                            }))
+      {activeProfileAttempt.user_id === user.id &&
+        c.user_id !== user.id &&
+        !c.clarification && (
+          <button
+            className="underline"
+            onClick={() => {
+              setClarifyingCommentId(c.id)
+              setClarificationDraft('')
+            }}
+          >
+            Ask clarification
+          </button>
+        )}
+    </div>
 
-                            setReplyingCommentId(null)
-                          }}
-                        >
-                          Submit reply
-                        </button>
-                      </div>
-                    )}
-                  {c.user_id === user.id && editingCommentId !== c.id && (
-                    <button
-                      className="text-xs underline"
-                      onClick={() => {
-                        setEditingCommentId(c.id)
-                        setEditDraft({
-                          second: c.second,
-                          issue: c.issue,
-                          suggestion: c.suggestion,
-                        })
-                      }}
-                    >
-                      Edit
-                    </button>
-                  )}
-                  {editingCommentId === c.id && (
-                    <button
-                      className="text-xs underline"
-                      onClick={async () => {
-                        await supabase
-                          .from('comments')
-                          .update({ suggestion: editDraft.suggestion })
-                          .eq('id', c.id)
-
-                        setEditingCommentId(null)
-                        fetchComments(activeProfileAttempt.id)
-                      }}
-                    >
-                      Save
-                    </button>
-                  )}
-                  {(c.user_id === user.id ||
-                    activeProfileAttempt.user_id === user.id) && (
-                      <button
-                        className="text-xs text-red-600 underline"
-                        onClick={() => deleteComment(c.id)}
-                      >
-                        Delete
-                      </button>
-                    )}
-                  {/* 🔹 ATTEMPT CORRECTION — ONLY FOR VIDEO OWNER */}
-                  {activeProfileAttempt.user_id === user.id && !c.corrected_at && (
-                    <div className="mt-2 ml-11 text-xs">
-                      <button
-                        className="underline"
-                        onClick={() =>
-                          setCorrectionState({ commentId: c.id, file: null })
-                        }
-                      >
-                        Attempt correction
-                      </button>
-                    </div>
-                  )}
-                  {c.corrected_at && (
-                    <div className="mt-2 ml-11 text-xs text-green-700">
-                      <button
-                        className="underline"
-                        onClick={() => {
-                          const correctedAttempt = feed.find(
-                            a => a.parent_attempt_id === activeProfileAttempt.id
-                          )
-
-                          if (correctedAttempt) {
-                            setActiveProfileAttempt(correctedAttempt)
-                            setShowProfile(false)
-                          }
-                        }}
-                      >
-                        Correction attempted
-                      </button>
-                    </div>
-                  )}
-
-                  {/* 🔹 CORRECTION UPLOAD UI */}
-                  {correctionState?.commentId === c.id && (
-                    <div className="mt-2 ml-11 space-y-2 text-xs">
-                      <input
-                        type="file"
-                        accept="video/*"
-                        onChange={e =>
-                          setCorrectionState(prev =>
-                            prev
-                              ? { ...prev, file: e.target.files?.[0] || null }
-                              : null
-                          )
-                        }
-                      />
-
-                      <button
-                        className="bg-black text-white px-3 py-1 rounded disabled:opacity-50"
-                        disabled={!correctionState.file || uploading}
-                        onClick={handleCorrectionUpload}
-                      >
-                        Upload
-                      </button>
-
-                      {uploading && (
-                        <div className="w-40 h-2 bg-gray-200 rounded overflow-hidden">
-                          <div
-                            className="h-full bg-black"
-                            style={{ width: `${uploadProgress}%` }}
-                          />
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-
-
-
-
-                </div>
-              </div>
-
-            ))}
+    {/* ================= ROW 3 ================= */}
+    {(c.clarification || replyingCommentId === c.id) && (
+      <div className="ml-11 mt-2 text-xs text-gray-700 italic">
+        {c.clarification && (
+          <div>
+            Clarification: {c.clarification}
+          </div>
+        )}
+      </div>
+    )}
+  </div>
+))}
           </div>
 
         </div>
@@ -2552,7 +2403,7 @@ export default function Home() {
                 ))}
               </div>
 
-              
+
               {/* ===== IMPROVEMENT SNAPSHOT (NEW) ===== */}
               <div className="border rounded-lg p-4 bg-white space-y-3">
                 <div className="text-sm font-semibold">

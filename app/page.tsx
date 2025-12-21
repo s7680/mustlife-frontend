@@ -104,6 +104,7 @@ export default function Home() {
   const [clarificationDraft, setClarificationDraft] = useState('')
 
   const [replyingCommentId, setReplyingCommentId] = useState<string | null>(null)
+  const [showLikesForComment, setShowLikesForComment] = useState<string | null>(null)
   const [replyDraft, setReplyDraft] = useState('')
 
   const [correctionState, setCorrectionState] = useState<{
@@ -2048,45 +2049,55 @@ export default function Home() {
                     <div className="flex gap-3 text-xs items-center">
 
                       {/* 👍 LIKE */}
-                      <button
-                        className="underline"
-                        onClick={async () => {
-                          if (!requireAuth()) return
+                     <button
+  className="underline"
+  onClick={async () => {
+    if (!requireAuth()) return
 
-                          // 1️⃣ insert like
-                          await supabase
-                            .from('comment_likes')
-                            .insert({
-                              user_id: user.id,
-                              comment_id: c.id,
-                            })
+    await supabase
+      .from('comment_likes')
+      .insert({
+        user_id: user.id,
+        comment_id: c.id,
+      })
 
-                          // 2️⃣ 🔔 notifications
-                          await supabase.from('notifications').insert([
-                            {
-                              user_id: c.user_id,                    // comment author
-                              actor_id: user.id,
-                              type: 'comment_like',
-                              attempt_id: c.attempt_id,
-                              comment_id: c.id,
-                              message: 'Someone liked your suggestion',
-                            },
-                            {
-                              user_id: activeProfileAttempt.user_id, // video owner
-                              actor_id: user.id,
-                              type: 'comment_like',
-                              attempt_id: c.attempt_id,
-                              comment_id: c.id,
-                              message: 'Someone liked a suggestion on your video',
-                            },
-                          ])
+    await supabase.from('notifications').insert([
+      {
+        user_id: c.user_id,
+        actor_id: user.id,
+        type: 'comment_like',
+        attempt_id: c.attempt_id,
+        comment_id: c.id,
+        message: 'Someone liked your suggestion',
+      },
+      {
+        user_id: activeProfileAttempt.user_id,
+        actor_id: user.id,
+        type: 'comment_like',
+        attempt_id: c.attempt_id,
+        comment_id: c.id,
+        message: 'Someone liked a suggestion on your video',
+      },
+    ])
 
-                          // 3️⃣ refresh comments (to update like count later)
-                          fetchComments(activeProfileAttempt.id)
-                        }}
-                      >
-                        👍 {c.comment_likes?.length ?? 0}
-                      </button>
+    fetchComments(activeProfileAttempt.id)
+  }}
+>
+  👍 {c.comment_likes?.length ?? 0}
+</button>
+
+{(c.comment_likes?.length ?? 0) > 0 && (
+  <button
+    className="underline text-gray-600"
+    onClick={() =>
+      setShowLikesForComment(
+        showLikesForComment === c.id ? null : c.id
+      )
+    }
+  >
+    See likes
+  </button>
+)}
 
                       {/* EDIT */}
                       {c.user_id === user.id && editingCommentId !== c.id && (
@@ -2136,6 +2147,34 @@ export default function Home() {
                     </div>
                   </div>
                 </div>
+                {showLikesForComment === c.id && (
+  <div className="ml-11 mt-2 space-y-2 text-xs">
+    {c.comment_likes?.map(like => {
+      const p = feedProfiles[like.user_id]
+      if (!p) return null
+
+      return (
+        <div
+          key={like.user_id}
+          className="flex items-center gap-2 cursor-pointer hover:opacity-80"
+          onClick={() => openProfile(like.user_id)}
+        >
+          <div className="w-6 h-6 rounded-full bg-gray-300 overflow-hidden">
+            {p.avatar_url && (
+              <img
+                src={p.avatar_url}
+                className="w-full h-full object-cover"
+              />
+            )}
+          </div>
+          <span className="underline">
+            {p.username}
+          </span>
+        </div>
+      )
+    })}
+  </div>
+)}
 
                 {/* ================= ROW 2 ================= */}
                 <div className="ml-11 mt-2 flex gap-6 text-xs">

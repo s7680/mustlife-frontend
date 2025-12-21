@@ -1914,160 +1914,163 @@ export default function Home() {
               </div>
             )}
 
-           {(comments[activeProfileAttempt.id] ?? []).map(c => (
-  <div
-    key={c.id}
-    className="border rounded p-2 text-sm bg-white"
-  >
-    {/* ================= ROW 1 ================= */}
-    <div className="flex items-start gap-3 flex-wrap">
+            {(comments[activeProfileAttempt.id] ?? []).map(c => (
+              <div
+                key={c.id}
+                className="border rounded p-2 text-sm bg-white"
+              >
+                {/* ================= ROW 1 ================= */}
+                <div className="flex items-start gap-3 flex-wrap">
 
-      {/* AVATAR */}
-      <div
-        className="w-8 h-8 rounded-full bg-gray-300 overflow-hidden flex-shrink-0
+                  {/* AVATAR */}
+                  <div
+                    className="w-8 h-8 rounded-full bg-gray-300 overflow-hidden flex-shrink-0
         cursor-pointer hover:opacity-80 transition"
-        onClick={() => openProfile(c.profiles?.id!)}
-      >
-        {c.profiles?.avatar_url && (
-          <img
-            src={c.profiles.avatar_url}
-            className="w-full h-full object-cover"
-          />
-        )}
-      </div>
+                    onClick={() => openProfile(c.profiles?.id!)}
+                  >
+                    {c.profiles?.avatar_url && (
+                      <img
+                        src={c.profiles.avatar_url}
+                        className="w-full h-full object-cover"
+                      />
+                    )}
+                  </div>
 
-      {/* ROW 1 CONTENT */}
-      <div className="flex-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+                  {/* ROW 1 CONTENT */}
+                  <div className="flex-1 flex flex-wrap items-center gap-x-3 gap-y-1">
 
-        {/* NAME */}
-        <span
-          className="font-medium cursor-pointer hover:underline"
-          onClick={() => openProfile(c.profiles?.id!)}
-        >
-          {c.profiles?.display_name || c.profiles?.username || 'User'}
-        </span>
+                    {/* NAME */}
+                    <span
+                      className="font-medium cursor-pointer hover:underline"
+                      onClick={() => openProfile(c.profiles?.id!)}
+                    >
+                      {c.profiles?.display_name || c.profiles?.username || 'User'}
+                    </span>
 
-        {/* TIMESTAMP */}
-        <button
-          className="text-xs text-gray-500 underline"
-          onClick={() => seekActiveVideo(c.second)}
-        >
-          {c.second === 0 ? 'Overall' : `${c.second}s`}
-        </button>
+                    {/* TIMESTAMP */}
+                    <button
+                      className="text-xs text-gray-500 underline"
+                      onClick={() => seekActiveVideo(c.second)}
+                    >
+                      {c.second === 0 ? 'Overall' : `${c.second}s`}
+                    </button>
 
-        {/* ISSUE */}
-        <span className="text-xs font-medium bg-gray-100 px-2 py-0.5 rounded">
-          {c.issue}
-        </span>
+                    {/* ISSUE */}
+                    <span className="text-xs font-medium bg-gray-100 px-2 py-0.5 rounded">
+                      {c.issue}
+                    </span>
 
-        {/* SUGGESTION */}
-        {/* SUGGESTION */}
-{editingCommentId === c.id ? (
-  <input
-    className="border px-2 py-1 text-sm w-full max-w-md"
-    value={editDraft.suggestion}
-    onChange={e =>
-      setEditDraft(prev => ({
-        ...prev,
-        suggestion: e.target.value,
-      }))
-    }
-  />
-) : (
-  <span className="text-gray-700">
-    {c.suggestion}
-  </span>
-)}
+                    {/* SUGGESTION */}
+                    {/* SUGGESTION */}
+                    {editingCommentId === c.id ? (
+                      <input
+                        className="border px-2 py-1 text-sm w-full max-w-md"
+                        value={editDraft.suggestion}
+                        onChange={e =>
+                          setEditDraft(prev => ({
+                            ...prev,
+                            suggestion: e.target.value,
+                          }))
+                        }
+                      />
+                    ) : (
+                      <span className="text-gray-700">
+                        {c.suggestion}
+                      </span>
+                    )}
 
-        {/* ACTIONS */}
-        <div className="flex gap-2 text-xs">
-          {c.user_id === user.id && editingCommentId !== c.id && (
-  <button
-    className="underline"
-    onClick={() => {
-      setEditingCommentId(c.id)
-      setEditDraft({
-        second: c.second,
-        issue: c.issue,
-        suggestion: c.suggestion,
-      })
-    }}
-  >
-    Edit
-  </button>
-)}
+                    {/* ACTIONS */}
+                    <div className="flex gap-2 text-xs">
+  {/* EDIT */}
+  {c.user_id === user.id && editingCommentId !== c.id && (
+    <button
+      className="underline"
+      onClick={() => {
+        setEditingCommentId(c.id)
+        setEditDraft({
+          second: c.second,
+          issue: c.issue,
+          suggestion: c.suggestion,
+        })
+      }}
+    >
+      Edit
+    </button>
+  )}
 
-{c.user_id === user.id && editingCommentId !== c.id && (
-  <button
-    className="underline"
-    onClick={async () => {
-      await supabase
-        .from('comments')
-        .update({ suggestion: editDraft.suggestion })
-        .eq('id', c.id)
+  {/* SAVE */}
+  {c.user_id === user.id && editingCommentId === c.id && (
+    <button
+      className="underline"
+      onClick={async () => {
+        await supabase
+          .from('comments')
+          .update({ suggestion: editDraft.suggestion })
+          .eq('id', c.id)
 
-      setEditingCommentId(null)
-      fetchComments(activeProfileAttempt.id)
-    }}
-  >
-    Save
-  </button>
-)}
+        setEditingCommentId(null)
+        fetchComments(activeProfileAttempt.id)
+      }}
+    >
+      Save
+    </button>
+  )}
 
-          {(c.user_id === user.id ||
-            activeProfileAttempt.user_id === user.id) && (
-            <button
-              className="underline text-red-600"
-              onClick={() => deleteComment(c.id)}
-            >
-              Delete
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
+  {/* DELETE */}
+  {(c.user_id === user.id ||
+    activeProfileAttempt.user_id === user.id) && (
+    <button
+      className="underline text-red-600"
+      onClick={() => deleteComment(c.id)}
+    >
+      Delete
+    </button>
+  )}
+</div>
+                  </div>
+                </div>
 
-    {/* ================= ROW 2 ================= */}
-    <div className="ml-11 mt-2 flex gap-6 text-xs">
+                {/* ================= ROW 2 ================= */}
+                <div className="ml-11 mt-2 flex gap-6 text-xs">
 
-      {activeProfileAttempt.user_id === user.id && !c.corrected_at && (
-        <button
-          className="underline"
-          onClick={() =>
-            setCorrectionState({ commentId: c.id, file: null })
-          }
-        >
-          Attempt correction
-        </button>
-      )}
+                  {activeProfileAttempt.user_id === user.id && !c.corrected_at && (
+                    <button
+                      className="underline"
+                      onClick={() =>
+                        setCorrectionState({ commentId: c.id, file: null })
+                      }
+                    >
+                      Attempt correction
+                    </button>
+                  )}
 
-      {activeProfileAttempt.user_id === user.id &&
-        c.user_id !== user.id &&
-        !c.clarification && (
-          <button
-            className="underline"
-            onClick={() => {
-              setClarifyingCommentId(c.id)
-              setClarificationDraft('')
-            }}
-          >
-            Ask clarification
-          </button>
-        )}
-    </div>
+                  {activeProfileAttempt.user_id === user.id &&
+                    c.user_id !== user.id &&
+                    !c.clarification && (
+                      <button
+                        className="underline"
+                        onClick={() => {
+                          setClarifyingCommentId(c.id)
+                          setClarificationDraft('')
+                        }}
+                      >
+                        Ask clarification
+                      </button>
+                    )}
+                </div>
 
-    {/* ================= ROW 3 ================= */}
-    {(c.clarification || replyingCommentId === c.id) && (
-      <div className="ml-11 mt-2 text-xs text-gray-700 italic">
-        {c.clarification && (
-          <div>
-            Clarification: {c.clarification}
-          </div>
-        )}
-      </div>
-    )}
-  </div>
-))}
+                {/* ================= ROW 3 ================= */}
+                {(c.clarification || replyingCommentId === c.id) && (
+                  <div className="ml-11 mt-2 text-xs text-gray-700 italic">
+                    {c.clarification && (
+                      <div>
+                        Clarification: {c.clarification}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
 
         </div>

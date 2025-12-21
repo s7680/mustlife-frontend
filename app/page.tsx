@@ -177,6 +177,7 @@ export default function Home() {
   const [skillIssues, setSkillIssues] = useState<Record<string, string[]>>({})
 
   /* ---------- FEED FILTER STATE ---------- */
+  const [searchPublicId, setSearchPublicId] = useState('')
   const [filterCommunity, setFilterCommunity] = useState<string | null>(null)
   const [filterSkill, setFilterSkill] = useState<string | null>(null)
   const [filterCommunities, setFilterCommunities] = useState<string[]>([])
@@ -636,6 +637,25 @@ export default function Home() {
     filterAppliedTimeoutRef.current = setTimeout(() => {
       setFilterApplied(false)
     }, 1500)
+  }
+  async function searchByPublicId() {
+    const pid = searchPublicId.trim().replace(/^@/, '')
+    if (!pid) return
+
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('public_id', pid)
+      .maybeSingle()
+
+    if (error || !data) {
+      alert('User not found')
+      return
+    }
+
+    openProfile(data.id)
+    fetchUserUploads(data.id)
+    setSearchPublicId('')
   }
   async function fetchComments(attemptId: string) {
     const res = await supabase
@@ -2402,6 +2422,39 @@ export default function Home() {
 
             {/* ===== PROFILE HEADER — WHO IS THIS ATHLETE NOW ===== */}
             <div className="space-y-4 border rounded-lg p-4 bg-gray-50">
+              {/* ABOUT (BIO) */}
+              <div className="text-sm">
+                <div className="text-xs text-gray-500 mb-1">About</div>
+                {editingBio && isOwnProfile ? (
+                  <textarea
+                    className="w-full border rounded p-2"
+                    rows={4}
+                    maxLength={200}
+                    autoFocus
+                    value={bio}
+                    onChange={e => setBio(e.target.value)}
+                    onBlur={async () => {
+                      setEditingBio(false)
+
+                      if (bio.trim() === '') return
+
+                      await supabase
+                        .from('profiles')
+                        .update({ bio })
+                        .eq('id', user.id)
+                    }}
+                  />
+                ) : (
+                  <div
+                    className={`border rounded p-2 bg-white whitespace-pre-wrap
+                    ${isOwnProfile ? 'cursor-pointer hover:bg-gray-50 transition' : ''}
+                     `}
+                    onClick={() => isOwnProfile && setEditingBio(true)}
+                  >
+                    {bio || 'Write about yourself (max 200 words)'}
+                  </div>
+                )}
+              </div>
 
               {/* ROLE */}
               <div className="text-sm">
@@ -2499,39 +2552,7 @@ export default function Home() {
                 ))}
               </div>
 
-              {/* ABOUT (BIO) */}
-              <div className="text-sm">
-                <div className="text-xs text-gray-500 mb-1">About</div>
-                {editingBio && isOwnProfile ? (
-                  <textarea
-                    className="w-full border rounded p-2"
-                    rows={4}
-                    maxLength={200}
-                    autoFocus
-                    value={bio}
-                    onChange={e => setBio(e.target.value)}
-                    onBlur={async () => {
-                      setEditingBio(false)
-
-                      if (bio.trim() === '') return
-
-                      await supabase
-                        .from('profiles')
-                        .update({ bio })
-                        .eq('id', user.id)
-                    }}
-                  />
-                ) : (
-                  <div
-                    className={`border rounded p-2 bg-white whitespace-pre-wrap
-  ${isOwnProfile ? 'cursor-pointer hover:bg-gray-50 transition' : ''}
-`}
-                    onClick={() => isOwnProfile && setEditingBio(true)}
-                  >
-                    {bio || 'Write about yourself (max 200 words)'}
-                  </div>
-                )}
-              </div>
+              
               {/* ===== IMPROVEMENT SNAPSHOT (NEW) ===== */}
               <div className="border rounded-lg p-4 bg-white space-y-3">
                 <div className="text-sm font-semibold">
@@ -3002,64 +3023,94 @@ export default function Home() {
       {/* ===== FEED FILTERS ===== */}
       {!showProfile && !activeProfileAttempt && (
         <div className="max-w-5xl mx-auto px-6 pt-6">
-          <div className="bg-white border rounded-xl p-4 flex flex-wrap gap-3 items-center">
-            <button
-              className="text-sm underline cursor-pointer hover:text-black transition"
-              onClick={() => setShowFilters(v => !v)}
-            >
-              {filterApplied ? 'Filter applied' : 'Filter'}
-            </button>
+          <div className="bg-white border rounded-xl p-4 flex flex-col gap-2">
+
+            {/* 🔍 SEARCH + FILTER GROUP */}
+            <div className="flex flex-col gap-1">
+
+              {/* SEARCH ROW */}
+              <div className="flex items-center gap-2">
+                <input
+                  className="border px-2 py-1 text-sm rounded w-40"
+                  placeholder="@user-id"
+                  value={searchPublicId}
+                  onChange={e => setSearchPublicId(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') searchByPublicId()
+                  }}
+                />
+                <button
+                  className="text-sm underline cursor-pointer hover:text-black transition"
+                  onClick={searchByPublicId}
+                >
+                  Search
+                </button>
+              </div>
+
+              {/* FILTER BUTTON — JUST BELOW SEARCH */}
+              <button
+                className="text-xs underline cursor-pointer hover:text-black transition self-start"
+                onClick={() => setShowFilters(v => !v)}
+              >
+                {filterApplied ? 'Filter applied' : 'Filter'}
+              </button>
+            </div>
+
+            {/* FILTER OPTIONS */}
             {showFilters && (
               <>
 
                 {/* 1️⃣ COMMUNITY */}
-                <div className="space-y-1">
-                  <div className="text-xs text-gray-500">Community</div>
+                <div className="grid grid-cols-2 gap-6">
+                  {/* COMMUNITY */}
+                  <div className="space-y-1">
+                    <div className="text-xs text-gray-500">Community</div>
 
-                  {[...new Set(skills.map(s => s.community))].map(c => (
-                    <label key={c} className="flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={filterCommunities.includes(c)}
-                        onChange={() => {
-                          setFilterApplied(false)
-                          setFilterCommunities(prev =>
-                            prev.includes(c)
-                              ? prev.filter(x => x !== c)
-                              : [...prev, c]
-                          )
-                        }}
-                      />
-                      {c}
-                    </label>
-                  ))}
-                </div>
-
-
-                <div className="space-y-1">
-                  <div className="text-xs text-gray-500">Skill</div>
-
-                  {skills
-                    .filter(s =>
-                      filterCommunities.length === 0 ||
-                      filterCommunities.includes(s.community)
-                    )
-                    .map(s => (
-                      <label key={s.id} className="flex items-center gap-2 text-sm">
+                    {[...new Set(skills.map(s => s.community))].map(c => (
+                      <label key={c} className="flex items-center gap-2 text-sm">
                         <input
                           type="checkbox"
-                          checked={filterSkills.includes(s.id)}
-                          onChange={() =>
-                            setFilterSkills(prev =>
-                              prev.includes(s.id)
-                                ? prev.filter(x => x !== s.id)
-                                : [...prev, s.id]
+                          checked={filterCommunities.includes(c)}
+                          onChange={() => {
+                            setFilterApplied(false)
+                            setFilterCommunities(prev =>
+                              prev.includes(c)
+                                ? prev.filter(x => x !== c)
+                                : [...prev, c]
                             )
-                          }
+                          }}
                         />
-                        {s.name}
+                        {c}
                       </label>
                     ))}
+                  </div>
+
+                  {/* SKILL */}
+                  <div className="space-y-1">
+                    <div className="text-xs text-gray-500">Skill</div>
+
+                    {skills
+                      .filter(s =>
+                        filterCommunities.length === 0 ||
+                        filterCommunities.includes(s.community)
+                      )
+                      .map(s => (
+                        <label key={s.id} className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={filterSkills.includes(s.id)}
+                            onChange={() =>
+                              setFilterSkills(prev =>
+                                prev.includes(s.id)
+                                  ? prev.filter(x => x !== s.id)
+                                  : [...prev, s.id]
+                              )
+                            }
+                          />
+                          {s.name}
+                        </label>
+                      ))}
+                  </div>
                 </div>
 
                 {false && (

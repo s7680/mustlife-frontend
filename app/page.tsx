@@ -1981,52 +1981,52 @@ export default function Home() {
 
                     {/* ACTIONS */}
                     <div className="flex gap-2 text-xs">
-  {/* EDIT */}
-  {c.user_id === user.id && editingCommentId !== c.id && (
-    <button
-      className="underline"
-      onClick={() => {
-        setEditingCommentId(c.id)
-        setEditDraft({
-          second: c.second,
-          issue: c.issue,
-          suggestion: c.suggestion,
-        })
-      }}
-    >
-      Edit
-    </button>
-  )}
+                      {/* EDIT */}
+                      {c.user_id === user.id && editingCommentId !== c.id && (
+                        <button
+                          className="underline"
+                          onClick={() => {
+                            setEditingCommentId(c.id)
+                            setEditDraft({
+                              second: c.second,
+                              issue: c.issue,
+                              suggestion: c.suggestion,
+                            })
+                          }}
+                        >
+                          Edit
+                        </button>
+                      )}
 
-  {/* SAVE */}
-  {c.user_id === user.id && editingCommentId === c.id && (
-    <button
-      className="underline"
-      onClick={async () => {
-        await supabase
-          .from('comments')
-          .update({ suggestion: editDraft.suggestion })
-          .eq('id', c.id)
+                      {/* SAVE */}
+                      {c.user_id === user.id && editingCommentId === c.id && (
+                        <button
+                          className="underline"
+                          onClick={async () => {
+                            await supabase
+                              .from('comments')
+                              .update({ suggestion: editDraft.suggestion })
+                              .eq('id', c.id)
 
-        setEditingCommentId(null)
-        fetchComments(activeProfileAttempt.id)
-      }}
-    >
-      Save
-    </button>
-  )}
+                            setEditingCommentId(null)
+                            fetchComments(activeProfileAttempt.id)
+                          }}
+                        >
+                          Save
+                        </button>
+                      )}
 
-  {/* DELETE */}
-  {(c.user_id === user.id ||
-    activeProfileAttempt.user_id === user.id) && (
-    <button
-      className="underline text-red-600"
-      onClick={() => deleteComment(c.id)}
-    >
-      Delete
-    </button>
-  )}
-</div>
+                      {/* DELETE */}
+                      {(c.user_id === user.id ||
+                        activeProfileAttempt.user_id === user.id) && (
+                          <button
+                            className="underline text-red-600"
+                            onClick={() => deleteComment(c.id)}
+                          >
+                            Delete
+                          </button>
+                        )}
+                    </div>
                   </div>
                 </div>
 
@@ -2060,15 +2060,73 @@ export default function Home() {
                 </div>
 
                 {/* ================= ROW 3 ================= */}
-                {(c.clarification || replyingCommentId === c.id) && (
-                  <div className="ml-11 mt-2 text-xs text-gray-700 italic">
-                    {c.clarification && (
-                      <div>
-                        Clarification: {c.clarification}
-                      </div>
-                    )}
-                  </div>
-                )}
+                {/* ================= ROW 3 ================= */}
+{c.clarification && (
+  <div className="ml-11 mt-2 space-y-2 text-xs text-gray-700">
+
+    {/* USER CLARIFICATION */}
+    <div className="italic">
+      Clarification: {c.clarification}
+    </div>
+
+    {/* COACH REPLY BUTTON */}
+    {viewerRole === 'coach' &&
+      c.user_id === user.id && // coach is comment author
+      !c.clarified_at && (
+        <button
+          className="underline"
+          onClick={() => {
+            setReplyingCommentId(c.id)
+            setReplyDraft('')
+          }}
+        >
+          Reply
+        </button>
+      )}
+
+    {/* COACH REPLY INPUT */}
+    {replyingCommentId === c.id && !c.clarified_at && (
+      <div className="space-y-1">
+        <input
+          className="border p-1 w-full"
+          placeholder="Reply to clarification (max 200 chars)"
+          maxLength={200}
+          value={replyDraft}
+          onChange={e => setReplyDraft(e.target.value)}
+        />
+
+        <button
+          className="underline"
+          onClick={async () => {
+            if (!replyDraft.trim()) return
+
+            await supabase
+              .from('comments')
+              .update({
+                suggestion: replyDraft,          // overwrite suggestion
+                clarified_by: user.id,
+                clarified_at: new Date().toISOString(),
+              })
+              .eq('id', c.id)
+
+            setReplyingCommentId(null)
+            setReplyDraft('')
+            fetchComments(activeProfileAttempt.id)
+          }}
+        >
+          Submit reply
+        </button>
+      </div>
+    )}
+
+    {/* FINAL COACH REPLY (READ-ONLY) */}
+    {c.clarified_at && (
+      <div className="text-gray-800">
+        Coach reply: {c.suggestion}
+      </div>
+    )}
+  </div>
+)}
               </div>
             ))}
           </div>

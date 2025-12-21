@@ -1,7 +1,7 @@
 'use client'
 export const dynamic = 'force-dynamic'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import Image from 'next/image'
 import { supabase } from '../lib/supabase'
 
@@ -179,8 +179,14 @@ export default function Home() {
   /* ---------- FEED FILTER STATE ---------- */
   const [filterCommunity, setFilterCommunity] = useState<string | null>(null)
   const [filterSkill, setFilterSkill] = useState<string | null>(null)
+  const [filterCommunities, setFilterCommunities] = useState<string[]>([])
+  const [filterSkills, setFilterSkills] = useState<string[]>([])
+  const [filterIssues, setFilterIssues] = useState<string[]>([])
   const [filterType, setFilterType] = useState<'latest' | 'following' | 'relevance'>('latest')
   const [filterApplied, setFilterApplied] = useState(false)
+  const [showFilters, setShowFilters] = useState(false)
+  const [globalPlaybackRate, setGlobalPlaybackRate] = useState(1)
+  const filterAppliedTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   /* ---------- UPLOAD STATE (ADDED) ---------- */
   const [uploading, setUploading] = useState(false)
@@ -200,6 +206,21 @@ export default function Home() {
     if (!activeProfileAttempt) return
     fetchComments(activeProfileAttempt.id)
   }, [activeProfileAttempt])
+
+  useEffect(() => {
+    document.querySelectorAll('video').forEach(v => {
+      try {
+        v.playbackRate = globalPlaybackRate
+      } catch { }
+    })
+  }, [globalPlaybackRate])
+  function seekActiveVideo(second: number) {
+    const video = document.getElementById('active-video') as HTMLVideoElement | null
+    if (!video) return
+
+    video.pause()
+    video.currentTime = second <= 0 ? 0 : second
+  }
 
   useEffect(() => {
     if (!activeProfileAttempt) return
@@ -538,15 +559,24 @@ export default function Home() {
       .eq('processing_status', 'done')
       .not('processed_video_url', 'is', null)
 
-    if (filterSkill) {
-      q = q.eq('skill_id', filterSkill)
-    } else if (filterCommunity) {
-      const skillIds = skills
-        .filter(s => s.community === filterCommunity)
-        .map(s => s.id)
+    // ✅ SKILL FILTER (MULTI)
+   let skillIdsToUse: string[] = []
 
-      q = q.in('skill_id', skillIds)
-    }
+if (filterCommunities.length > 0) {
+  skillIdsToUse = skills
+    .filter(s => filterCommunities.includes(s.community))
+    .map(s => s.id)
+}
+
+if (filterSkills.length > 0) {
+  skillIdsToUse = skillIdsToUse.length > 0
+    ? skillIdsToUse.filter(id => filterSkills.includes(id))
+    : filterSkills
+}
+
+if (skillIdsToUse.length > 0) {
+  q = q.in('skill_id', skillIdsToUse)
+}
 
     // 🔹 MINIMAL RELEVANCE LOGIC
     if (filterType === 'relevance') {
@@ -571,10 +601,25 @@ export default function Home() {
         .in('user_id', followingIds)
         .order('created_at', { ascending: false })
     }
-
+    q = q.order('created_at', { ascending: false })
     const { data } = await q
-    setFeed(data ?? [])
-    const userIds = [...new Set((data ?? []).map(a => a.user_id))]
+    let filtered = data ?? []
+
+
+    // ✅ ISSUE FILTER (POST QUERY)
+    if (filterIssues.length > 0 && Object.keys(comments).length > 0) {
+      const allowedAttemptIds = Object.values(comments)
+        .flat()
+        .filter(c => filterIssues.includes(c.issue))
+        .map(c => c.attempt_id)
+
+      filtered = filtered.filter(a =>
+        allowedAttemptIds.includes(a.id)
+      )
+    }
+
+    setFeed(filtered)
+    const userIds = [...new Set(filtered.map(a => a.user_id))]
 
     if (userIds.length > 0) {
       const { data: profiles } = await supabase
@@ -593,6 +638,14 @@ export default function Home() {
       setFeedProfiles(map)
     }
     setFilterApplied(true)
+
+    if (filterAppliedTimeoutRef.current) {
+      clearTimeout(filterAppliedTimeoutRef.current)
+    }
+
+    filterAppliedTimeoutRef.current = setTimeout(() => {
+      setFilterApplied(false)
+    }, 1500)
   }
   async function fetchComments(attemptId: string) {
     const res = await supabase
@@ -1597,6 +1650,7 @@ export default function Home() {
                   <div>
                     <div className="text-xs text-gray-500 mb-1">After</div>
                     <video
+                      id="active-video"
                       src={activeProfileAttempt.processed_video_url!}
                       controls
                       className="w-full max-h-[70vh] rounded bg-black object-contain"
@@ -1620,6 +1674,7 @@ export default function Home() {
               ) : (
                 /* SINGLE VIDEO VIEW */
                 <video
+                  id="active-video"
                   src={activeProfileAttempt.processed_video_url!}
                   controls
                   className="w-full max-h-[70vh] rounded bg-black object-contain"
@@ -1748,9 +1803,9 @@ export default function Home() {
                           suggestion: d.suggestion,
                         })
                         .select(`
-    *,
-    comment_likes(user_id)
-  `)
+                 *,
+                     comment_likes(user_id)
+                    `)
                         .single()
 
                       if (error) {
@@ -1882,10 +1937,13 @@ export default function Home() {
                   </span>
 
                   {/* TIMESTAMP */}
-                  <span className="text-xs text-gray-500 whitespace-nowrap">
+                  <button
+                    type="button"
+                    className="text-xs text-gray-500 underline whitespace-nowrap cursor-pointer text-left"
+                    onClick={() => seekActiveVideo(c.second)}
+                  >
                     {c.second === 0 ? 'Overall' : `${c.second}s`}
-                  </span>
-
+                  </button>
                   {/* ISSUE */}
                   <span className="font-medium whitespace-nowrap">
                     {c.issue}
@@ -2177,6 +2235,7 @@ export default function Home() {
             </span>
           </div>
         </div>
+
 
         {/* ===== PROFILE BUTTON (ADDED) ===== */}
         <button
@@ -2670,12 +2729,7 @@ export default function Home() {
               </div>
             )}
 
-            {/* ===== SKILL DASHBOARD — WHAT AM I WORKING ON ===== */}
-            {skillDashboard && (
-              <div className="border rounded-lg p-4 bg-white">
-                ...
-              </div>
-            )}
+
 
             {/* ===== COACH QUICK SCAN (READ-ONLY) ===== */}
             {!isOwnProfile && viewerRole === 'coach' && (
@@ -2948,158 +3002,215 @@ export default function Home() {
       {!showProfile && !activeProfileAttempt && (
         <div className="max-w-5xl mx-auto px-6 pt-6">
           <div className="bg-white border rounded-xl p-4 flex flex-wrap gap-3 items-center">
-
-            {/* 1️⃣ COMMUNITY */}
-            <select
-              className="border p-2 text-sm"
-              value={filterCommunity ?? ''}
-              onChange={e => {
-                setFilterCommunity(e.target.value || null)
-                setFilterSkill(null)
-                setFilterApplied(false)
-              }}
-            >
-              <option value="">Select Community</option>
-              {[...new Set(skills.map(s => s.community))].map(c => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </select>
-
-            {/* 2️⃣ SKILL */}
-            <select
-              className="border p-2 text-sm"
-              value={filterSkill ?? ''}
-              disabled={!filterCommunity}
-              onChange={e => {
-                setFilterSkill(e.target.value || null)
-                setFilterApplied(false)
-              }}
-            >
-              <option value="">Select Skill</option>
-              {skills
-                .filter(s => s.community === filterCommunity)
-                .map(s => (
-                  <option key={s.id} value={s.id}>{s.name}</option>
-                ))}
-            </select>
-
-            {/* 3️⃣ FILTER TYPE */}
-            <select
-              className="border p-2 text-sm"
-              value={filterType}
-              onChange={e => {
-                setFilterType(e.target.value as any)
-                setFilterApplied(false)
-              }}
-            >
-              <option value="latest">Latest</option>
-              <option value="following">Following</option>
-              <option value="relevance">Relevance</option>
-            </select>
-
-            {/* 4️⃣ APPLY BUTTON */}
             <button
-              className={`px-4 py-2 text-sm rounded border
+              className="text-sm underline"
+              onClick={() => setShowFilters(v => !v)}
+            >
+              {filterApplied ? 'Filter applied' : 'Filter'}
+            </button>
+            {showFilters && (
+              <>
+
+                {/* 1️⃣ COMMUNITY */}
+                <div className="space-y-1">
+                  <div className="text-xs text-gray-500">Community</div>
+
+                  {[...new Set(skills.map(s => s.community))].map(c => (
+                    <label key={c} className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={filterCommunities.includes(c)}
+                        onChange={() => {
+                          setFilterApplied(false)
+                          setFilterCommunities(prev =>
+                            prev.includes(c)
+                              ? prev.filter(x => x !== c)
+                              : [...prev, c]
+                          )
+                        }}
+                      />
+                      {c}
+                    </label>
+                  ))}
+                </div>
+
+                <div className="space-y-1">
+                  <div className="text-xs text-gray-500">Skill</div>
+
+                  {skills
+                    .filter(s =>
+                      filterCommunities.length === 0 ||
+                      filterCommunities.includes(s.community)
+                    )
+                    .map(s => (
+                      <label key={s.id} className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={filterSkills.includes(s.id)}
+                          onChange={() =>
+                            setFilterSkills(prev =>
+                              prev.includes(s.id)
+                                ? prev.filter(x => x !== s.id)
+                                : [...prev, s.id]
+                            )
+                          }
+                        />
+                        {s.name}
+                      </label>
+                    ))}
+                </div>
+                <div className="space-y-1">
+                  <div className="text-xs text-gray-500">Issue</div>
+
+                  {Array.from(
+                    new Set(
+                      Object.entries(skillIssues)
+                        .filter(([skillId]) =>
+                          filterSkills.length === 0 || filterSkills.includes(skillId)
+                        )
+                        .flatMap(([, issues]) => issues)
+                    )
+                  ).map(issue => (
+                    <label key={issue} className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={filterIssues.includes(issue)}
+                        onChange={() =>
+                          setFilterIssues(prev =>
+                            prev.includes(issue)
+                              ? prev.filter(x => x !== issue)
+                              : [...prev, issue]
+                          )
+                        }
+                      />
+                      {issue}
+                    </label>
+                  ))}
+                </div>
+
+                {/* 3️⃣ FILTER TYPE */}
+                <select
+                  className="border p-2 text-sm"
+                  value={filterType}
+                  onChange={e => {
+                    setFilterType(e.target.value as any)
+                    setFilterApplied(false)
+                  }}
+                >
+                  <option value="latest">Latest</option>
+                  <option value="following">Following</option>
+                  <option value="relevance">Relevance</option>
+                </select>
+
+                {/* 4️⃣ APPLY BUTTON */}
+                <button
+                  className={`px-4 py-2 text-sm rounded border
       ${filterApplied ? 'bg-black text-white' : 'bg-white'}
     `}
-              onClick={applyHomeFilter}
-            >
-              Apply filter
-            </button>
+                  onClick={applyHomeFilter}
+                >
+                  Apply filter
+                </button>
+              </>
+            )}
 
           </div>
         </div>
-      )}
+      )
+      }
+
 
 
       {/* ================= FEED ================= */}
-      {!showProfile && !activeProfileAttempt && (
-        <div className="max-w-5xl mx-auto p-6 space-y-6">
-          {feed.length === 0 && (
-            <div className="text-center text-sm text-gray-500">
-              No videos yet
-            </div>
-          )}
-
-          {feed.map(attempt => (
-            <div
-              key={attempt.id}
-              className="bg-white border rounded-xl p-4"
-            >
-
-              {attempt.user_id === user.id && (
-                <button
-                  className="text-xs text-red-600 underline float-right"
-                  onClick={e => {
-                    e.stopPropagation()
-                    deleteAttempt(attempt.id)
-                  }}
-                >
-                  Delete
-                </button>
-              )}
-              {/* HEADER (NEW) */}
-              <div className="flex items-center gap-3 mb-2">
-                <div
-                  className="w-8 h-8 rounded-full bg-gray-300 overflow-hidden cursor-pointer"
-                  onClick={e => {
-                    e.stopPropagation()
-                    openProfile(attempt.user_id)
-                    fetchUserUploads(attempt.user_id)
-                  }}
-                >
-                  {feedProfiles[attempt.user_id]?.avatar_url && (
-                    <img
-                      src={feedProfiles[attempt.user_id]?.avatar_url || ''}
-                      className="w-full h-full object-cover"
-                    />
-                  )}
-                </div>
-
-                <div className="text-sm">
-                  <div className="font-medium">
-                    {feedProfiles[attempt.user_id]?.username ?? 'User'}
-                  </div>
-                  <div className="text-xs text-gray-500">
-                    {skills.find(s => s.id === attempt.skill_id)?.community}
-                    {' → '}
-                    {skills.find(s => s.id === attempt.skill_id)?.name}
-                  </div>
-                </div>
-                <div className="text-[11px] text-gray-400">
-                  {new Date(attempt.created_at).toLocaleString('en-IN', {
-                    timeZone: 'Asia/Kolkata',
-                  })}
-                </div>
+      {
+        !showProfile && !activeProfileAttempt && (
+          <div className="max-w-5xl mx-auto p-6 space-y-6">
+            {feed.length === 0 && (
+              <div className="text-center text-sm text-gray-500">
+                No videos yet
               </div>
+            )}
 
-              {/* VIDEO (UNCHANGED BEHAVIOR) */}
+            {feed.map(attempt => (
               <div
-                className="cursor-pointer"
-                onClick={() => {
-                  setActiveProfileAttempt(attempt)
-                  setShowProfile(false)
-
-                  setOriginalAttempt(
-                    attempt.parent_attempt_id
-                      ? feed.find(a => a.id === attempt.parent_attempt_id) || attempt
-                      : attempt
-                  )
-                  setIsReAttempt(false)
-                  setReAttemptFile(null)
-                }}
+                key={attempt.id}
+                className="bg-white border rounded-xl p-4"
               >
 
-                <video
-                  src={attempt.processed_video_url!}
-                  className="w-full max-h-[70vh] rounded bg-black object-contain"
-                  muted
-                />
+                {attempt.user_id === user.id && (
+                  <button
+                    className="text-xs text-red-600 underline float-right"
+                    onClick={e => {
+                      e.stopPropagation()
+                      deleteAttempt(attempt.id)
+                    }}
+                  >
+                    Delete
+                  </button>
+                )}
+                {/* HEADER (NEW) */}
+                <div className="flex items-center gap-3 mb-2">
+                  <div
+                    className="w-8 h-8 rounded-full bg-gray-300 overflow-hidden cursor-pointer"
+                    onClick={e => {
+                      e.stopPropagation()
+                      openProfile(attempt.user_id)
+                      fetchUserUploads(attempt.user_id)
+                    }}
+                  >
+                    {feedProfiles[attempt.user_id]?.avatar_url && (
+                      <img
+                        src={feedProfiles[attempt.user_id]?.avatar_url || ''}
+                        className="w-full h-full object-cover"
+                      />
+                    )}
+                  </div>
+
+                  <div className="text-sm">
+                    <div className="font-medium">
+                      {feedProfiles[attempt.user_id]?.username ?? 'User'}
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      {skills.find(s => s.id === attempt.skill_id)?.community}
+                      {' → '}
+                      {skills.find(s => s.id === attempt.skill_id)?.name}
+                    </div>
+                  </div>
+                  <div className="text-[11px] text-gray-400">
+                    {new Date(attempt.created_at).toLocaleString('en-IN', {
+                      timeZone: 'Asia/Kolkata',
+                    })}
+                  </div>
+                </div>
+
+                {/* VIDEO (UNCHANGED BEHAVIOR) */}
+                <div
+                  className="cursor-pointer"
+                  onClick={() => {
+                    setActiveProfileAttempt(attempt)
+                    setShowProfile(false)
+
+                    setOriginalAttempt(
+                      attempt.parent_attempt_id
+                        ? feed.find(a => a.id === attempt.parent_attempt_id) || attempt
+                        : attempt
+                    )
+                    setIsReAttempt(false)
+                    setReAttemptFile(null)
+                  }}
+                >
+
+                  <video
+                    src={attempt.processed_video_url!}
+                    className="w-full max-h-[70vh] rounded bg-black object-contain"
+                    muted
+                  />
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
-      )}
+            ))}
+          </div>
+        )
+      }
 
       {
         showPicModal && profilePicUrl && (

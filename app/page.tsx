@@ -194,6 +194,9 @@ export default function Home() {
   const [filterType, setFilterType] = useState<'latest' | 'following' | 'relevance'>('latest')
   const [filterApplied, setFilterApplied] = useState(false)
   const [showFilters, setShowFilters] = useState(false)
+  /* ===== COMPARE ATTEMPTS (NEW) ===== */
+  const [compareSkill, setCompareSkill] = useState<string | null>(null)
+  const [compareAttempts, setCompareAttempts] = useState<Attempt[]>([])
   const [globalPlaybackRate, setGlobalPlaybackRate] = useState(1)
   const filterAppliedTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -211,6 +214,12 @@ export default function Home() {
 
 
   /* 🔹 AUTO-FETCH COMMENTS WHEN A VIDEO OPENS */
+  useEffect(() => {
+  if (compareAttempts.length === 2) {
+    const ids = compareAttempts.map(a => a.id).join(',')
+    window.location.href = `/compare?ids=${ids}`
+  }
+}, [compareAttempts])
   useEffect(() => {
     if (!activeProfileAttempt) return
     fetchComments(activeProfileAttempt.id)
@@ -776,7 +785,7 @@ export default function Home() {
         skill: row.skills?.name ?? 'Unknown',
         url: row.processed_video_url,
         created_at: row.created_at,
-        isReAttempt: Boolean(row.parent_attempt_id)
+        isReAttempt: Boolean(row.parent_attempt_id),
       }))
     )
   }
@@ -820,7 +829,7 @@ export default function Home() {
       activeSkillName = data.skills.name
     }
 
-    const skill = skills.find(s => s.id === activeSkillName)
+    const skill = skills.find(s => s.name === activeSkillName)
     if (!skill) return
 
     // 2️⃣ Attempts last 14 days
@@ -2364,8 +2373,8 @@ export default function Home() {
         <button
           className="text-sm underline cursor-pointer hover:text-black transition"
           onClick={() => {
-  window.location.href = '/issues'
-}}
+            window.location.href = '/issues'
+          }}
         >
           Issues
         </button>
@@ -3068,7 +3077,7 @@ export default function Home() {
                     {skills
                       .filter(s => s.community === selectedCommunity)
                       .map(s => (
-                        <option key={s.id} value={s.name}>
+                        <option key={s.id} value={s.id}>
                           {s.name}
                         </option>
                       ))}
@@ -3162,48 +3171,87 @@ export default function Home() {
 
                   {Object.entries(skills as any).map(([skill, vids]) => (
                     <div key={skill} className="ml-4">
-                      <div className="text-sm font-semibold text-gray-700 mt-2">
-                        {skill}
-                      </div>
-                      <div className="flex gap-3 flex-wrap mt-2">
-                        {(vids as any[]).map((v, i) => (
-                          <div
-                            key={i}
-                            className="w-24 h-16 bg-black rounded cursor-pointer overflow-hidden"
+                      <div className="flex items-center justify-between mt-2">
+                        <div className="text-sm font-semibold text-gray-700">
+                          {skill}
+                        </div>
+
+                        {isOwnProfile && (vids as any[]).length >= 2 && (
+                          <button
+                            className="text-xs underline"
                             onClick={() => {
-                              const attempt = feed.find(
-                                a => a.processed_video_url === v.url
-                              )
-                              if (!attempt) {
-                                alert('Attempt not found')
-                                return
-                              }
-
-                              setActiveProfileAttempt(attempt)
-                              setShowProfile(false)
-
-
-                              // reset re-attempt state
-
-                              setOriginalAttempt(
-                                attempt.parent_attempt_id
-                                  ? feed.find(a => a.id === attempt.parent_attempt_id) || attempt
-                                  : attempt
-                              )
-                              setIsReAttempt(false)
-                              setReAttemptFile(null)
+                              setCompareSkill(skill)
+                              setCompareAttempts([])
                             }}
                           >
-                            <video
-                              src={v.url}
-                              className="w-full h-full object-cover"
-                              muted
-                            />
-                            <div className="text-[10px] text-gray-500 text-center mt-1">
-                              {formatIST(v.created_at, false)}
-                            </div>
+                            Compare
+                          </button>
+                        )}
+                        {compareSkill === skill && (
+                          <div className="text-[11px] text-gray-500 mt-1">
+                            Select two attempts to compare
                           </div>
-                        ))}
+                        )}
+                      </div>
+                      <div className="flex gap-3 flex-wrap mt-2">
+                        {(() => {
+                          // sort attempts by earliest first for numbering
+                          const sorted = [...(vids as any[])].sort(
+                            (a, b) =>
+                              new Date(a.created_at).getTime() -
+                              new Date(b.created_at).getTime()
+                          )
+
+                          return sorted.map((v, index) => (
+                            <div
+                              key={v.url}
+                              className={`w-24 cursor-pointer
+    ${compareAttempts.some(a => a.processed_video_url === v.url)
+                                  ? 'ring-2 ring-black rounded'
+                                  : ''}
+  `}
+                              onClick={() => {
+                                const attempt = feed.find(
+                                  a => a.processed_video_url === v.url
+                                )
+                                if (!attempt) return
+
+                               if (compareSkill === skill) {
+  setCompareAttempts(prev => {
+    if (prev.find(a => a.id === attempt.id)) return prev
+    if (prev.length === 2) return prev
+
+    const next = [...prev, attempt]
+
+    return next
+  })
+  return
+}
+
+                                setActiveProfileAttempt(attempt)
+                                setShowProfile(false)
+                              }}
+                            >
+                              <div className="w-24 h-16 bg-black rounded overflow-hidden">
+                                <video
+                                  src={v.url}
+                                  className="w-full h-full object-cover"
+                                  muted
+                                />
+                              </div>
+
+                              {/* ATTEMPT NUMBER */}
+                              <div className="text-[10px] font-medium text-center mt-1">
+                                Attempt {index + 1}
+                              </div>
+
+                              {/* DATE */}
+                              <div className="text-[10px] text-gray-500 text-center">
+                                {formatIST(v.created_at, false)}
+                              </div>
+                            </div>
+                          ))
+                        })()}
                       </div>
                     </div>
                   ))}
@@ -3213,163 +3261,165 @@ export default function Home() {
 
           </div>
         </div>
-      )}
+      )
+      }
 
       {/* ===== FEED FILTERS ===== */}
-      {!showProfile && !activeProfileAttempt && (
-        <div className="max-w-5xl mx-auto px-6 pt-6">
-          <div className="bg-white border rounded-xl p-4 flex flex-col gap-2">
+      {
+        !showProfile && !activeProfileAttempt && (
+          <div className="max-w-5xl mx-auto px-6 pt-6">
+            <div className="bg-white border rounded-xl p-4 flex flex-col gap-2">
 
-            {/* 🔍 SEARCH + FILTER GROUP */}
-            <div className="flex flex-col gap-1">
+              {/* 🔍 SEARCH + FILTER GROUP */}
+              <div className="flex flex-col gap-1">
 
-              {/* SEARCH ROW */}
-              <div className="flex items-center gap-2">
-                <input
-                  className="border px-2 py-1 text-sm rounded w-40"
-                  placeholder="@user-id"
-                  value={searchPublicId}
-                  onChange={e => setSearchPublicId(e.target.value)}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') searchByPublicId()
-                  }}
-                />
+                {/* SEARCH ROW */}
+                <div className="flex items-center gap-2">
+                  <input
+                    className="border px-2 py-1 text-sm rounded w-40"
+                    placeholder="@user-id"
+                    value={searchPublicId}
+                    onChange={e => setSearchPublicId(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') searchByPublicId()
+                    }}
+                  />
+                  <button
+                    className="text-sm underline cursor-pointer hover:text-black transition"
+                    onClick={searchByPublicId}
+                  >
+                    Search
+                  </button>
+                </div>
+
+                {/* FILTER BUTTON — JUST BELOW SEARCH */}
                 <button
-                  className="text-sm underline cursor-pointer hover:text-black transition"
-                  onClick={searchByPublicId}
+                  className="text-xs underline cursor-pointer hover:text-black transition self-start"
+                  onClick={() => setShowFilters(v => !v)}
                 >
-                  Search
+                  {filterApplied ? 'Filter applied' : 'Filter'}
                 </button>
               </div>
 
-              {/* FILTER BUTTON — JUST BELOW SEARCH */}
-              <button
-                className="text-xs underline cursor-pointer hover:text-black transition self-start"
-                onClick={() => setShowFilters(v => !v)}
-              >
-                {filterApplied ? 'Filter applied' : 'Filter'}
-              </button>
-            </div>
+              {/* FILTER OPTIONS */}
+              {showFilters && (
+                <>
 
-            {/* FILTER OPTIONS */}
-            {showFilters && (
-              <>
+                  {/* 1️⃣ COMMUNITY */}
+                  <div className="grid grid-cols-2 gap-6">
+                    {/* COMMUNITY */}
+                    <div className="space-y-1">
+                      <div className="text-xs text-gray-500">Community</div>
 
-                {/* 1️⃣ COMMUNITY */}
-                <div className="grid grid-cols-2 gap-6">
-                  {/* COMMUNITY */}
-                  <div className="space-y-1">
-                    <div className="text-xs text-gray-500">Community</div>
-
-                    {[...new Set(skills.map(s => s.community))].map(c => (
-                      <label key={c} className="flex items-center gap-2 text-sm">
-                        <input
-                          type="checkbox"
-                          checked={filterCommunities.includes(c)}
-                          onChange={() => {
-                            setFilterApplied(false)
-                            setFilterCommunities(prev =>
-                              prev.includes(c)
-                                ? prev.filter(x => x !== c)
-                                : [...prev, c]
-                            )
-                          }}
-                        />
-                        {c}
-                      </label>
-                    ))}
-                  </div>
-
-                  {/* SKILL */}
-                  <div className="space-y-1">
-                    <div className="text-xs text-gray-500">Skill</div>
-
-                    {skills
-                      .filter(s =>
-                        filterCommunities.length === 0 ||
-                        filterCommunities.includes(s.community)
-                      )
-                      .map(s => (
-                        <label key={s.id} className="flex items-center gap-2 text-sm">
+                      {[...new Set(skills.map(s => s.community))].map(c => (
+                        <label key={c} className="flex items-center gap-2 text-sm">
                           <input
                             type="checkbox"
-                            checked={filterSkills.includes(s.id)}
+                            checked={filterCommunities.includes(c)}
+                            onChange={() => {
+                              setFilterApplied(false)
+                              setFilterCommunities(prev =>
+                                prev.includes(c)
+                                  ? prev.filter(x => x !== c)
+                                  : [...prev, c]
+                              )
+                            }}
+                          />
+                          {c}
+                        </label>
+                      ))}
+                    </div>
+
+                    {/* SKILL */}
+                    <div className="space-y-1">
+                      <div className="text-xs text-gray-500">Skill</div>
+
+                      {skills
+                        .filter(s =>
+                          filterCommunities.length === 0 ||
+                          filterCommunities.includes(s.community)
+                        )
+                        .map(s => (
+                          <label key={s.id} className="flex items-center gap-2 text-sm">
+                            <input
+                              type="checkbox"
+                              checked={filterSkills.includes(s.id)}
+                              onChange={() =>
+                                setFilterSkills(prev =>
+                                  prev.includes(s.id)
+                                    ? prev.filter(x => x !== s.id)
+                                    : [...prev, s.id]
+                                )
+                              }
+                            />
+                            {s.name}
+                          </label>
+                        ))}
+                    </div>
+                  </div>
+
+                  {false && (
+                    <div className="space-y-1">
+                      <div className="text-xs text-gray-500">Issue</div>
+
+                      {Array.from(
+                        new Set(
+                          Object.entries(skillIssues)
+                            .filter(([skillId]) =>
+                              filterSkills.length === 0 || filterSkills.includes(skillId)
+                            )
+                            .flatMap(([, issues]) => issues)
+                        )
+                      ).map(issue => (
+                        <label key={issue} className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={filterIssues.includes(issue)}
                             onChange={() =>
-                              setFilterSkills(prev =>
-                                prev.includes(s.id)
-                                  ? prev.filter(x => x !== s.id)
-                                  : [...prev, s.id]
+                              setFilterIssues(prev =>
+                                prev.includes(issue)
+                                  ? prev.filter(x => x !== issue)
+                                  : [...prev, issue]
                               )
                             }
                           />
-                          {s.name}
+                          {issue}
                         </label>
                       ))}
-                  </div>
-                </div>
+                    </div>
+                  )}
 
-                {false && (
-                  <div className="space-y-1">
-                    <div className="text-xs text-gray-500">Issue</div>
+                  {/* 3️⃣ FILTER TYPE */}
+                  <select
+                    className="border p-2 text-sm"
+                    value={filterType}
+                    onChange={e => {
+                      setFilterType(e.target.value as any)
+                      setFilterApplied(false)
+                    }}
+                  >
+                    <option value="latest">Latest</option>
+                    <option value="following">Following</option>
+                    <option value="relevance">Relevance</option>
+                  </select>
 
-                    {Array.from(
-                      new Set(
-                        Object.entries(skillIssues)
-                          .filter(([skillId]) =>
-                            filterSkills.length === 0 || filterSkills.includes(skillId)
-                          )
-                          .flatMap(([, issues]) => issues)
-                      )
-                    ).map(issue => (
-                      <label key={issue} className="flex items-center gap-2 text-sm">
-                        <input
-                          type="checkbox"
-                          checked={filterIssues.includes(issue)}
-                          onChange={() =>
-                            setFilterIssues(prev =>
-                              prev.includes(issue)
-                                ? prev.filter(x => x !== issue)
-                                : [...prev, issue]
-                            )
-                          }
-                        />
-                        {issue}
-                      </label>
-                    ))}
-                  </div>
-                )}
-
-                {/* 3️⃣ FILTER TYPE */}
-                <select
-                  className="border p-2 text-sm"
-                  value={filterType}
-                  onChange={e => {
-                    setFilterType(e.target.value as any)
-                    setFilterApplied(false)
-                  }}
-                >
-                  <option value="latest">Latest</option>
-                  <option value="following">Following</option>
-                  <option value="relevance">Relevance</option>
-                </select>
-
-                {/* 4️⃣ APPLY BUTTON */}
-                <button
-                  className={`px-4 py-2 text-sm rounded border cursor-pointer transition
+                  {/* 4️⃣ APPLY BUTTON */}
+                  <button
+                    className={`px-4 py-2 text-sm rounded border cursor-pointer transition
     ${filterApplied
-                      ? 'bg-black text-white'
-                      : 'bg-white hover:bg-gray-100'}
+                        ? 'bg-black text-white'
+                        : 'bg-white hover:bg-gray-100'}
   `}
-                  onClick={applyHomeFilter}
-                >
-                  Apply filter
-                </button>
-              </>
-            )}
+                    onClick={applyHomeFilter}
+                  >
+                    Apply filter
+                  </button>
+                </>
+              )}
 
+            </div>
           </div>
-        </div>
-      )
+        )
       }
 
 

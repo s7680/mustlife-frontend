@@ -3197,7 +3197,7 @@ export default function Home() {
 
                   {Object.entries(skills as any).map(([skill, vids]) => (
                     <div key={skill} className="ml-4">
-                      <div className="flex items-center justify-between mt-2">
+                      <div className="flex items-center justify-between mt-2 flex-wrap gap-2">
                         <div className="text-sm font-semibold text-gray-700">
                           {skill}
                         </div>

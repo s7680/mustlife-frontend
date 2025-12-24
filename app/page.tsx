@@ -3033,47 +3033,47 @@ export default function Home() {
                 <div className="text-gray-500 text-xs">Following</div>
               </div>
 
-              {/* FOLLOW CONTROLS — ONLY WHEN VIEWING OTHER USER */}
-              {user?.id !== profileUserId && (
-                <div className="flex gap-3">
-                  {/* FOLLOW (when not following) */}
-                  {!isFollowing && (
-                    <button
-                      onClick={() => {
-                        if (!requireAuth()) return
-                        toggleFollow()
-                      }}
-                      className="px-5 py-2 rounded text-sm font-semibold bg-black text-white hover:bg-gray-800 transition"
-                    >
-                      Follow
-                    </button>
-                  )}
+            {/* FOLLOW CONTROLS — ONLY WHEN VIEWING OTHER USER */}
+{user?.id !== profileUserId && (
+  <div className="flex gap-3">
+    {/* FOLLOW (when not following) */}
+    {!isFollowing && (
+      <button
+        onClick={() => {
+          if (!requireAuth()) return
+          toggleFollow()
+        }}
+        className="px-5 py-2 rounded text-sm font-semibold bg-black text-white hover:bg-gray-800 transition"
+      >
+        Follow
+      </button>
+    )}
 
-                  {/* FOLLOWING + UNFOLLOW (when already following) */}
-                  {isFollowing && (
-                    <>
-                      <button
-                        disabled
-                        className="px-5 py-2 rounded text-sm font-semibold border bg-white text-black cursor-default"
-                      >
-                        Following
-                      </button>
+    {/* FOLLOWING + UNFOLLOW (when already following) */}
+    {isFollowing && (
+      <>
+        <button
+          disabled
+          className="px-5 py-2 rounded text-sm font-semibold border bg-white text-black cursor-default"
+        >
+          Following
+        </button>
 
-                      <button
-                        onClick={() => {
-                          if (!requireAuth()) return
-                          toggleFollow()
-                        }}
-                        className="px-5 py-2 rounded text-sm font-semibold border text-black hover:bg-gray-100 transition"
-                      >
-                        Unfollow
-                      </button>
-                    </>
-                  )}
-                </div>
-              )}
+        <button
+          onClick={() => {
+            if (!requireAuth()) return
+            toggleFollow()
+          }}
+          className="px-5 py-2 rounded text-sm font-semibold border text-black hover:bg-gray-100 transition"
+        >
+          Unfollow
+        </button>
+      </>
+    )}
+  </div>
+)}
             </div>
-
+           
 
             {/* Upload Video */}
             {user?.id === profileUserId && (

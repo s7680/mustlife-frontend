@@ -215,11 +215,11 @@ export default function Home() {
 
   /* 🔹 AUTO-FETCH COMMENTS WHEN A VIDEO OPENS */
   useEffect(() => {
-  if (compareAttempts.length === 2) {
-    const ids = compareAttempts.map(a => a.id).join(',')
-    window.location.href = `/compare?ids=${ids}`
-  }
-}, [compareAttempts])
+    if (compareAttempts.length === 2) {
+      const ids = compareAttempts.map(a => a.id).join(',')
+      window.location.href = `/compare?ids=${ids}`
+    }
+  }, [compareAttempts])
   useEffect(() => {
     if (!activeProfileAttempt) return
     fetchComments(activeProfileAttempt.id)
@@ -262,6 +262,7 @@ export default function Home() {
   const [role, setRole] = useState<string | null>(null)
   const [viewerRole, setViewerRole] = useState<string | null>(null)
   const [showCoachScan, setShowCoachScan] = useState(false)
+  const [showImprovementSnapshot, setShowImprovementSnapshot] = useState(false)
   const [primaryCommunity, setPrimaryCommunity] = useState<string | null>(null)
   const [primarySkill, setPrimarySkill] = useState<string | null>(null)
   const [bio, setBio] = useState('')
@@ -2757,168 +2758,178 @@ export default function Home() {
 
 
               {/* ===== IMPROVEMENT SNAPSHOT (NEW) ===== */}
-              <div className="border rounded-lg p-4 bg-white space-y-3">
-                <div className="text-sm font-semibold">
-                  Improvement snapshot
-                </div>
+              {/* ===== IMPROVEMENT SNAPSHOT (COLLAPSIBLE) ===== */}
+              <div className="border rounded-lg bg-white">
 
-                {/* 1️⃣ RECURRING ISSUES */}
-                <div className="text-sm">
-                  <div className="text-xs text-gray-500 mb-1">
-                    Most recurring issues
-                  </div>
+                {/* HEADER */}
+                <button
+                  className="w-full flex items-center justify-between p-4 text-sm font-semibold
+               cursor-pointer hover:bg-gray-50 transition"
+                  onClick={() => setShowImprovementSnapshot(v => !v)}
+                >
+                  <span>Improvement snapshot</span>
+                  <span className="text-xs">
+                    {showImprovementSnapshot ? '▲' : '▼'}
+                  </span>
+                </button>
 
-                  {(() => {
-                    /**
-                     * Structure:
-                     * community -> skill -> issue -> count
-                     */
-                    const grouped: Record<
-                      string,
-                      Record<string, Record<string, number>>
-                    > = {}
+                {/* BODY */}
+                {showImprovementSnapshot && (
+                  <div className="p-4 space-y-3">
 
-                    Object.values(comments).flat().forEach(c => {
-                      const attempt = feed.find(a => a.id === c.attempt_id)
-                      if (!attempt) return
-
-                      const skill = skills.find(s => s.id === attempt.skill_id)
-                      if (!skill) return
-
-                      grouped[skill.community] ??= {}
-                      grouped[skill.community][skill.name] ??= {}
-                      grouped[skill.community][skill.name][c.issue] =
-                        (grouped[skill.community][skill.name][c.issue] || 0) + 1
-                    })
-
-                    const communities = Object.keys(grouped)
-                    if (communities.length === 0) {
-                      return <div className="text-xs text-gray-400">No feedback yet</div>
-                    }
-
-                    return (
-                      <div className="text-xs space-y-3">
-                        {communities.map(community => (
-                          <div key={community}>
-                            <div className="font-medium text-gray-800 mb-1">
-                              {community}
-                            </div>
-
-                            <div className="pl-3 space-y-1">
-                              {Object.entries(grouped[community]).map(
-                                ([skillName, issues]) => {
-                                  const topIssue = Object.entries(issues).sort(
-                                    (a, b) => b[1] - a[1]
-                                  )[0]
-
-                                  return (
-                                    <div key={skillName} className="text-gray-700">
-                                      {skillName}: {topIssue[0]} ({topIssue[1]})
-                                    </div>
-                                  )
-                                }
-                              )}
-                            </div>
-                          </div>
-                        ))}
+                    {/* 1️⃣ RECURRING ISSUES */}
+                    <div className="text-sm">
+                      <div className="text-xs text-gray-500 mb-1">
+                        Most recurring issues
                       </div>
-                    )
-                  })()}
-                </div>
 
-                {/* 2️⃣ ISSUES FIXED VS PENDING */}
-                <div className="text-sm">
-                  <div className="text-xs text-gray-500 mb-1">
-                    Feedback action
-                  </div>
+                      {(() => {
+                        const grouped: Record<
+                          string,
+                          Record<string, Record<string, number>>
+                        > = {}
 
-                  {(() => {
-                    /**
-                     * community -> skill -> { fixed, pending }
-                     */
-                    const grouped: Record<
-                      string,
-                      Record<string, { fixed: number; pending: number }>
-                    > = {}
+                        Object.values(comments).flat().forEach(c => {
+                          const attempt = feed.find(a => a.id === c.attempt_id)
+                          if (!attempt) return
 
-                    Object.values(comments).flat().forEach(c => {
-                      const attempt = feed.find(a => a.id === c.attempt_id)
-                      if (!attempt) return
+                          const skill = skills.find(s => s.id === attempt.skill_id)
+                          if (!skill) return
 
-                      const skill = skills.find(s => s.id === attempt.skill_id)
-                      if (!skill) return
+                          grouped[skill.community] ??= {}
+                          grouped[skill.community][skill.name] ??= {}
+                          grouped[skill.community][skill.name][c.issue] =
+                            (grouped[skill.community][skill.name][c.issue] || 0) + 1
+                        })
 
-                      grouped[skill.community] ??= {}
-                      grouped[skill.community][skill.name] ??= { fixed: 0, pending: 0 }
+                        const communities = Object.keys(grouped)
+                        if (communities.length === 0) {
+                          return <div className="text-xs text-gray-400">No feedback yet</div>
+                        }
 
-                      if (c.corrected_at) {
-                        grouped[skill.community][skill.name].fixed += 1
-                      } else {
-                        grouped[skill.community][skill.name].pending += 1
-                      }
-                    })
+                        return (
+                          <div className="text-xs space-y-3">
+                            {communities.map(community => (
+                              <div key={community}>
+                                <div className="font-medium text-gray-800 mb-1">
+                                  {community}
+                                </div>
 
-                    const communities = Object.keys(grouped)
-                    if (communities.length === 0) {
-                      return <div className="text-xs text-gray-400">No feedback yet</div>
-                    }
+                                <div className="pl-3 space-y-1">
+                                  {Object.entries(grouped[community]).map(
+                                    ([skillName, issues]) => {
+                                      const topIssue = Object.entries(issues).sort(
+                                        (a, b) => b[1] - a[1]
+                                      )[0]
 
-                    return (
-                      <div className="text-xs space-y-3">
-                        {communities.map(community => (
-                          <div key={community}>
-                            <div className="font-medium text-gray-800 mb-1">
-                              {community}
-                            </div>
-
-                            <div className="pl-3 space-y-1">
-                              {Object.entries(grouped[community]).map(
-                                ([skillName, stats]) => (
-                                  <div key={skillName} className="text-gray-700">
-                                    {skillName}: Fixed {stats.fixed} • Pending {stats.pending}
-                                  </div>
-                                )
-                              )}
-                            </div>
+                                      return (
+                                        <div key={skillName} className="text-gray-700">
+                                          {skillName}: {topIssue[0]} ({topIssue[1]})
+                                        </div>
+                                      )
+                                    }
+                                  )}
+                                </div>
+                              </div>
+                            ))}
                           </div>
-                        ))}
-                      </div>
-                    )
-                  })()}
-                </div>
-
-                {/* 3️⃣ USER INTENT */}
-                <div className="text-sm">
-                  <div className="text-xs text-gray-500 mb-1">
-                    What I want help with right now
-                  </div>
-
-                  {editingHelpIntent && isOwnProfile ? (
-                    <textarea
-                      className="w-full border rounded p-2 text-xs"
-                      rows={2}
-                      maxLength={200}
-                      value={helpIntent}
-                      autoFocus
-                      onChange={e => setHelpIntent(e.target.value)}
-                      onBlur={async () => {
-                        setEditingHelpIntent(false)
-                        await supabase
-                          .from('profiles')
-                          .update({ help_intent: helpIntent })
-                          .eq('id', user.id)
-                      }}
-                    />
-                  ) : (
-                    <div
-                      className={`border rounded p-2 text-xs bg-gray-50 ${isOwnProfile ? 'cursor-pointer' : ''
-                        }`}
-                      onClick={() => isOwnProfile && setEditingHelpIntent(true)}
-                    >
-                      {helpIntent || 'Click to describe what you want help with'}
+                        )
+                      })()}
                     </div>
-                  )}
-                </div>
+
+                    {/* 2️⃣ ISSUES FIXED VS PENDING */}
+                    <div className="text-sm">
+                      <div className="text-xs text-gray-500 mb-1">
+                        Feedback action
+                      </div>
+
+                      {(() => {
+                        const grouped: Record<
+                          string,
+                          Record<string, { fixed: number; pending: number }>
+                        > = {}
+
+                        Object.values(comments).flat().forEach(c => {
+                          const attempt = feed.find(a => a.id === c.attempt_id)
+                          if (!attempt) return
+
+                          const skill = skills.find(s => s.id === attempt.skill_id)
+                          if (!skill) return
+
+                          grouped[skill.community] ??= {}
+                          grouped[skill.community][skill.name] ??= { fixed: 0, pending: 0 }
+
+                          if (c.corrected_at) {
+                            grouped[skill.community][skill.name].fixed += 1
+                          } else {
+                            grouped[skill.community][skill.name].pending += 1
+                          }
+                        })
+
+                        const communities = Object.keys(grouped)
+                        if (communities.length === 0) {
+                          return <div className="text-xs text-gray-400">No feedback yet</div>
+                        }
+
+                        return (
+                          <div className="text-xs space-y-3">
+                            {communities.map(community => (
+                              <div key={community}>
+                                <div className="font-medium text-gray-800 mb-1">
+                                  {community}
+                                </div>
+
+                                <div className="pl-3 space-y-1">
+                                  {Object.entries(grouped[community]).map(
+                                    ([skillName, stats]) => (
+                                      <div key={skillName} className="text-gray-700">
+                                        {skillName}: Fixed {stats.fixed} • Pending {stats.pending}
+                                      </div>
+                                    )
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )
+                      })()}
+                    </div>
+
+                    {/* 3️⃣ USER INTENT */}
+                    <div className="text-sm">
+                      <div className="text-xs text-gray-500 mb-1">
+                        What I want help with right now
+                      </div>
+
+                      {editingHelpIntent && isOwnProfile ? (
+                        <textarea
+                          className="w-full border rounded p-2 text-xs"
+                          rows={2}
+                          maxLength={200}
+                          value={helpIntent}
+                          autoFocus
+                          onChange={e => setHelpIntent(e.target.value)}
+                          onBlur={async () => {
+                            setEditingHelpIntent(false)
+                            await supabase
+                              .from('profiles')
+                              .update({ help_intent: helpIntent })
+                              .eq('id', user.id)
+                          }}
+                        />
+                      ) : (
+                        <div
+                          className={`border rounded p-2 text-xs bg-gray-50
+              ${isOwnProfile ? 'cursor-pointer' : ''}`}
+                          onClick={() => isOwnProfile && setEditingHelpIntent(true)}
+                        >
+                          {helpIntent || 'Click to describe what you want help with'}
+                        </div>
+                      )}
+                    </div>
+
+                  </div>
+                )}
               </div>
 
             </div>
@@ -3022,32 +3033,47 @@ export default function Home() {
                 <div className="text-gray-500 text-xs">Following</div>
               </div>
 
-              {/* Follow button — ONLY other user's profile */}
+              {/* FOLLOW CONTROLS — ONLY WHEN VIEWING OTHER USER */}
               {user?.id !== profileUserId && (
-                <button
-                  className="border px-3 py-1 rounded text-sm"
-                  onClick={handleFollow}
-                >
-                  {isFollowing ? 'Following' : 'Follow'}
-                </button>
+                <div className="flex gap-3">
+                  {/* FOLLOW (when not following) */}
+                  {!isFollowing && (
+                    <button
+                      onClick={() => {
+                        if (!requireAuth()) return
+                        toggleFollow()
+                      }}
+                      className="px-5 py-2 rounded text-sm font-semibold bg-black text-white hover:bg-gray-800 transition"
+                    >
+                      Follow
+                    </button>
+                  )}
+
+                  {/* FOLLOWING + UNFOLLOW (when already following) */}
+                  {isFollowing && (
+                    <>
+                      <button
+                        disabled
+                        className="px-5 py-2 rounded text-sm font-semibold border bg-white text-black cursor-default"
+                      >
+                        Following
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          if (!requireAuth()) return
+                          toggleFollow()
+                        }}
+                        className="px-5 py-2 rounded text-sm font-semibold border text-black hover:bg-gray-100 transition"
+                      >
+                        Unfollow
+                      </button>
+                    </>
+                  )}
+                </div>
               )}
             </div>
-            {/* FOLLOW / UNFOLLOW — ONLY OTHER USER */}
-            {user?.id !== profileUserId && (
-              <button
-                onClick={() => {
-                  if (!requireAuth()) return
-                  toggleFollow()
-                }}
-                className={`px-4 py-2 rounded text-sm border cursor-pointer transition
-  ${isFollowing
-                    ? 'bg-white text-black hover:bg-gray-100'
-                    : 'bg-black text-white hover:bg-gray-800'}
-`}
-              >
-                {isFollowing ? 'Unfollow' : 'Follow'}
-              </button>
-            )}
+
 
             {/* Upload Video */}
             {user?.id === profileUserId && (
@@ -3216,17 +3242,17 @@ export default function Home() {
                                 )
                                 if (!attempt) return
 
-                               if (compareSkill === skill) {
-  setCompareAttempts(prev => {
-    if (prev.find(a => a.id === attempt.id)) return prev
-    if (prev.length === 2) return prev
+                                if (compareSkill === skill) {
+                                  setCompareAttempts(prev => {
+                                    if (prev.find(a => a.id === attempt.id)) return prev
+                                    if (prev.length === 2) return prev
 
-    const next = [...prev, attempt]
+                                    const next = [...prev, attempt]
 
-    return next
-  })
-  return
-}
+                                    return next
+                                  })
+                                  return
+                                }
 
                                 setActiveProfileAttempt(attempt)
                                 setShowProfile(false)

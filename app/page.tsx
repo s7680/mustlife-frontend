@@ -6,10 +6,16 @@ import Image from 'next/image'
 import { supabase } from '../lib/supabase'
 /* ===== IST DATE FORMATTER (GLOBAL) ===== */
 const formatIST = (date: string | Date, withTime = true) => {
-  return new Date(date).toLocaleString('en-IN', {
-    timeZone: 'Asia/Kolkata',
-    ...(withTime ? {} : { hour: undefined, minute: undefined, second: undefined })
-  })
+  const d = typeof date === 'string' ? new Date(date) : date
+
+  return withTime
+    ? d.toLocaleString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      hour12: true,
+    })
+    : d.toLocaleDateString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+    })
 }
 
 /* ================= TYPES ================= */
@@ -3236,8 +3242,8 @@ export default function Home() {
                           // sort attempts by earliest first for numbering
                           const sorted = [...(vids as any[])].sort(
                             (a, b) =>
-                              new Date(a.created_at).getTime() -
-                              new Date(b.created_at).getTime()
+                              Date.parse(a.created_at) -
+                              Date.parse(b.created_at)
                           )
 
                           return sorted.map((v, index) => (
@@ -3250,7 +3256,9 @@ export default function Home() {
   `}
                               onClick={() => {
                                 const attempt = feed.find(
-                                  a => a.processed_video_url === v.url
+                                  a =>
+                                    a.processed_video_url === v.url &&
+                                    a.created_at === v.created_at
                                 )
                                 if (!attempt) return
 

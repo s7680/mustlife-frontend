@@ -1410,147 +1410,7 @@ export default function Home() {
     )
   }
 
-  if (!user) {
-    return (
-      <main className="min-h-screen flex bg-[#FBF6EC] text-black [&_button]:cursor-pointer">
-        <section className="hidden md:flex w-1/2 relative">
-          <Image src="/activities3.jpg" alt="Activities" fill className="object-contain" />
-          <div className="absolute inset-0 bg-black/40 p-12 flex flex-col justify-center">
 
-          </div>
-        </section>
-
-        <section className="w-full md:w-1/2 flex items-center justify-center">
-          <div className="flex flex-col items-center">
-
-            {/* TITLE + TAGLINE */}
-            <div className="mb-6 text-center">
-              <div className="text-4xl font-bold mb-2">MUST_Life</div>
-              <div className="text-sm text-gray-600">
-                Practice together. Improve together.
-              </div>
-            </div>
-            <div className="w-[380px] bg-white border border-gray-200 p-8 rounded-2xl shadow-sm">
-              <h2 className="text-2xl font-semibold mb-6 text-center">
-                Login to MUST_Life
-              </h2>
-
-              <input
-                className="w-full border border-gray-300 p-2 mb-3 rounded"
-                placeholder="Email or Username"
-                value={loginEmail}
-                onChange={e => setLoginEmail(e.target.value)}
-              />
-
-              <input
-                className="w-full border border-gray-300 p-2 mb-3 rounded"
-                placeholder="Password"
-                type="password"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-              />
-
-              {authError && (
-                <p className="text-red-600 text-sm mb-3">{authError}</p>
-              )}
-
-              <button
-                className="w-full bg-black text-white py-2 rounded-lg mb-3
-             hover:bg-gray-800 transition"
-                onClick={loginWithPassword}
-              >
-                Login
-              </button>
-
-              {/* ✅ ONLY ADDITION */}
-              <p className="text-sm text-center mb-2">
-                New here? <span className="font-medium">Create account</span>
-              </p>
-
-              <button
-                className="w-full border border-black py-2 rounded-lg mb-4
-             hover:bg-gray-100 transition"
-                onClick={() => setAuthMode('verify_email')}
-              >
-                Create account
-              </button>
-
-              <div className="flex justify-between text-sm">
-                <button className="underline hover:text-black transition"
-                  onClick={() => setAuthMode('forgot_password')}
-                >
-                  Forgot password?
-                </button>
-                <button className="underline hover:text-black transition" onClick={continueAsGuest}>
-                  Continue as guest
-                </button>
-              </div>
-            </div>
-
-
-            {authMode === 'verify_email' && (
-              <div className="w-[380px] bg-white border p-6 rounded-xl mt-6">
-                <h3 className="text-lg font-semibold mb-3 text-center">
-                  Verify your email
-                </h3>
-
-                <input
-                  className="w-full border p-2 mb-3 rounded"
-                  placeholder="Email"
-                  value={signupEmail}
-                  onChange={e => setSignupEmail(e.target.value)}
-                />
-                <input
-                  className="w-full border p-2 mb-3 rounded"
-                  type="password"
-                  placeholder="Password (optional)"
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                />
-
-                {authError && (
-                  <p className="text-red-600 text-sm mb-2">{authError}</p>
-                )}
-
-                <button
-                  className="w-full bg-black text-white py-2 rounded"
-                  onClick={sendEmailVerification}
-                >
-                  Send verification link
-                </button>
-              </div>
-            )}
-            {authMode === 'forgot_password' && (
-              <div className="w-[380px] bg-white border p-6 rounded-xl mt-6">
-                <h3 className="text-lg font-semibold mb-3 text-center">
-                  Reset password
-                </h3>
-
-                <input
-                  className="w-full border p-2 mb-3 rounded"
-                  placeholder="Email"
-                  value={signupEmail}
-                  onChange={e => setSignupEmail(e.target.value)}
-                />
-
-                {authError && (
-                  <p className="text-red-600 text-sm mb-2">{authError}</p>
-                )}
-
-                <button
-                  className="w-full bg-black text-white py-2 rounded"
-                  onClick={sendPasswordReset}
-                >
-                  Send reset link
-                </button>
-              </div>
-            )}
-
-          </div>
-        </section>
-      </main>
-    )
-  }
   /* ================= COMPLETE PROFILE ================= */
 
   if (authMode === 'complete_profile') {
@@ -2395,7 +2255,10 @@ export default function Home() {
             setOriginalAttempt(null)
             setIsReAttempt(false)
             setReAttemptFile(null)
-
+            if (!user) {
+              alert('Please login to view profile')
+              return
+            }
             openProfile(user.id)
             fetchUserUploads(user.id)
           }}
@@ -3486,7 +3349,7 @@ export default function Home() {
                 className="bg-white border rounded-xl p-4"
               >
 
-                {attempt.user_id === user.id && (
+                {attempt.user_id === user?.id && (
                   <button
                     className="text-xs text-red-600 underline float-right"
                     onClick={e => {

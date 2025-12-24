@@ -3203,25 +3203,33 @@ export default function Home() {
                         </div>
 
                         {isOwnProfile && (vids as any[]).length >= 2 && (
-  <>
-    <button
-      className="text-xs underline font-semibold"
-      onClick={e => {
-        e.stopPropagation()
-        setCompareSkill(skill)
-        setCompareAttempts([])
-      }}
-    >
-      Compare {skill} attempts
-    </button>
+                          <>
+                            <button
+                              className={`text-xs underline font-semibold ${compareSkill === skill ? 'text-black' : ''
+                                }`}
+                              onClick={e => {
+                                e.stopPropagation()
 
-    {compareSkill === skill && (
-      <div className="text-[11px] text-gray-500 mt-1">
-        Select any two attempts
-      </div>
-    )}
-  </>
-)}
+                                // 🔁 TOGGLE LOGIC
+                                if (compareSkill === skill) {
+                                  setCompareSkill(null)
+                                  setCompareAttempts([])
+                                } else {
+                                  setCompareSkill(skill)
+                                  setCompareAttempts([])
+                                }
+                              }}
+                            >
+                              Compare {skill} attempts
+                            </button>
+
+                            {compareSkill === skill && (
+                              <div className="text-[11px] text-gray-500 mt-1">
+                                Select any two attempts
+                              </div>
+                            )}
+                          </>
+                        )}
                       </div>
                       <div className="flex gap-3 flex-wrap mt-2">
                         {(() => {

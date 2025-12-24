@@ -1202,7 +1202,9 @@ export default function Home() {
     setComments(prev => {
       const next = { ...prev }
       Object.keys(next).forEach(attemptId => {
-        next[attemptId] = next[attemptId].filter(c => c.id !== commentId)
+       next[attemptId] = (next[attemptId] ?? []).filter(
+  c => c && c.id !== commentId
+)
       })
       return next
     })

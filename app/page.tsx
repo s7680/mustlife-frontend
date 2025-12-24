@@ -145,7 +145,7 @@ export default function Home() {
   >('idle')
   const [checkingUsername, setCheckingUsername] = useState(false)
   const [user, setUser] = useState<any>(null)
-  const isGuest = user?.id === 'guest'
+  const safeUserId = user && user.id !== 'guest' ? user.id : null
   // ===== PROFILE META (TEMP / UI ONLY) =====
   const [showProfile, setShowProfile] = useState(false)
   const [viewedUserId, setViewedUserId] = useState<string | null>(null)
@@ -162,17 +162,16 @@ export default function Home() {
   } | null>(null)
 
   // ===== OPEN PROFILE (CENTRALIZED) =====
-  function openProfile(userId: string) {
+  function openProfile(userId: string | null) {
+    if (!userId) return
     setViewedUserId(userId)
     setShowProfile(true)
     setActiveProfileAttempt(null)
     fetchProfile(userId)
     fetchAllProfileComments(userId)
 
-    // persist intent across refresh
     localStorage.setItem('mustlife:view', 'profile')
     localStorage.setItem('mustlife:profileUserId', userId)
-
   }
 
 
@@ -498,6 +497,7 @@ export default function Home() {
 
     setProfilePicUrl(data.avatar_url)
     setBio(data.bio ?? '')
+    setHelpIntent((data as any).help_intent ?? '')
     setDisplayName(data.display_name ?? '')
     setPublicId(data.public_id ?? '')
     setImpactScore(data.impact ?? 0)
@@ -597,6 +597,11 @@ export default function Home() {
     }
   }
   async function applyHomeFilter() {
+    if (filterType === 'following' && !safeUserId) {
+      setFeed([])
+      setFilterApplied(true)
+      return
+    }
     let q = supabase
       .from('attempts')
       .select('id, user_id, processed_video_url, skill_id, created_at, caption')
@@ -730,39 +735,7 @@ export default function Home() {
       [attemptId]: (res.data ?? []).filter(isValidComment),
     }))
   }
-  async function fetchAllProfileComments(profileUserId: string) {
-    const { data: attempts } = await supabase
-      .from('attempts')
-      .select('id')
-      .eq('user_id', profileUserId)
 
-    if (!attempts || attempts.length === 0) return
-
-    const attemptIds = attempts.map(a => a.id)
-
-    const { data, error } = await supabase
-      .from('comments')
-      .select('*')
-      .in('attempt_id', attemptIds)
-
-    if (error) {
-      console.error('Profile comments fetch error:', error)
-      return
-    }
-
-    const grouped: Record<string, AppComment[]> = {}
-
-      ; (data ?? [])
-        .filter(isValidComment)
-        .forEach(c => {
-          grouped[c.attempt_id] ??= []
-          grouped[c.attempt_id].push(c)
-        })
-
-    setComments(grouped)
-
-    setComments(grouped)
-  }
   function getTimestampOptions(attemptId: string) {
     const duration = videoMeta[attemptId]?.duration ?? 60
     return Array.from({ length: duration }, (_, i) => i + 1)
@@ -809,43 +782,25 @@ export default function Home() {
     skillsList: Skill[]
   ) {
     // 1️⃣ Decide active skill
-    let activeSkillId = primarySkill
-    let activeSkillName: string | null = null
+    let skillIdToUse = primarySkill
 
-    if (!activeSkillId) {
+    if (!skillIdToUse) {
       const { data } = await supabase
         .from('attempts')
-        .select('skill_id, skills(name, community)')
+        .select('skill_id')
         .eq('user_id', profileUserId)
-        .gte(
-          'created_at',
-          new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString()
-        )
         .order('created_at', { ascending: false })
         .limit(1)
-        .maybeSingle<{
-          skill_id: string | null
-          skills: {
-            name: string
-            community: string
-          } | null
-        }>()
+        .maybeSingle()
 
-
-      if (!data) {
-        setSkillDashboard(null)
-        return
-      }
-      if (!data.skills || !data.skills.name) {
-        setSkillDashboard(null)
-        return
-      }
-      const skillsRow: { name: string; community: string } = data.skills
-      activeSkillName = data.skills.name
+      skillIdToUse = data?.skill_id ?? null
     }
 
-    const skill = skills.find(s => s.name === activeSkillName)
-    if (!skill) return
+    const skill = skills.find(s => s.id === skillIdToUse)
+    if (!skill) {
+      setSkillDashboard(null)
+      return
+    }
 
     // 2️⃣ Attempts last 14 days
     const { count: attempts14d } = await supabase
@@ -1169,7 +1124,8 @@ export default function Home() {
       if (attemptErr) throw attemptErr
 
 
-
+      setIncludeCaption(false)
+      setAttemptCaption('')
       setSelectedFile(null)
       setShowProfile(true)
       setActiveProfileAttempt(null)
@@ -1202,9 +1158,9 @@ export default function Home() {
     setComments(prev => {
       const next = { ...prev }
       Object.keys(next).forEach(attemptId => {
-       next[attemptId] = (next[attemptId] ?? []).filter(
-  c => c && c.id !== commentId
-)
+        next[attemptId] = (next[attemptId] ?? []).filter(
+          c => c && c.id !== commentId
+        )
       })
       return next
     })
@@ -1772,7 +1728,7 @@ export default function Home() {
                           ...prev,
                           [activeProfileAttempt.id]: [
                             ...(prev[activeProfileAttempt.id] ?? []),
-                            newComment,
+                            { ...newComment, profiles: newComment.profiles ?? null },
                           ],
                         }))
                       }
@@ -2335,7 +2291,9 @@ export default function Home() {
                         .from('attempts')
                         .select('*')
                         .eq('id', n.attempt_id)
-                        .single()
+                        .maybeSingle()
+
+                      if (!attempt) return
 
                       if (attempt) {
                         setActiveProfileAttempt(attempt)

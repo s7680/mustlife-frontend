@@ -68,6 +68,9 @@ type AppComment = {
     avatar_url: string | null
   }
 }
+function isValidComment(c: AppComment | null): c is AppComment {
+  return Boolean(c && c.id && c.attempt_id)
+}
 
 type UploadRow = {
   processed_video_url: string
@@ -528,7 +531,7 @@ export default function Home() {
     const grouped: Record<string, string[]> = {}
 
       ; (data ?? []).forEach(row => {
-        if (!grouped[row.skill_id]) grouped[row.skill_id] = []
+        grouped[row.skill_id] ??= []
         grouped[row.skill_id].push(row.issue)
       })
 
@@ -724,7 +727,7 @@ export default function Home() {
 
     setComments(prev => ({
       ...prev,
-      [attemptId]: (res.data ?? []).filter(c => c && c.id),
+      [attemptId]: (res.data ?? []).filter(isValidComment),
     }))
   }
   async function fetchAllProfileComments(profileUserId: string) {
@@ -748,10 +751,15 @@ export default function Home() {
     }
 
     const grouped: Record<string, AppComment[]> = {}
-    data.forEach(c => {
-      grouped[c.attempt_id] ??= []
-      grouped[c.attempt_id].push(c)
-    })
+
+      ; (data ?? [])
+        .filter(isValidComment)
+        .forEach(c => {
+          grouped[c.attempt_id] ??= []
+          grouped[c.attempt_id].push(c)
+        })
+
+    setComments(grouped)
 
     setComments(grouped)
   }

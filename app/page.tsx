@@ -169,7 +169,6 @@ export default function Home() {
     setShowProfile(true)
     setActiveProfileAttempt(null)
     fetchProfile(userId)
-    fetchAllProfileComments(userId)
 
     localStorage.setItem('mustlife:view', 'profile')
     localStorage.setItem('mustlife:profileUserId', userId)

@@ -1857,353 +1857,361 @@ export default function Home() {
               </div>
             )}
 
-            {(comments[activeProfileAttempt.id] ?? []).map(c => (
-              <div
-                key={c.id}
-                className="border rounded p-2 text-sm bg-white"
-              >
-                {/* ================= ROW 1 ================= */}
-                <div className="flex items-start gap-3 flex-wrap">
+            {(comments[activeProfileAttempt.id] ?? [])
+              .filter(c => c && c.id)
+              .map(c => (
+                <div
+                  key={c.id}
+                  className="border rounded p-2 text-sm bg-white"
+                >
+                  {/* ================= ROW 1 ================= */}
+                  <div className="flex items-start gap-3 flex-wrap">
 
-                  {/* AVATAR */}
-                  <div
-                    className="w-8 h-8 rounded-full bg-gray-300 overflow-hidden flex-shrink-0
-        cursor-pointer hover:opacity-80 transition"
-                    onClick={() => openProfile(c.profiles?.id!)}
-                  >
-                    {c.profiles?.avatar_url && (
-                      <img
-                        src={c.profiles.avatar_url}
-                        className="w-full h-full object-cover"
-                      />
-                    )}
-                  </div>
-
-                  {/* ROW 1 CONTENT */}
-                  <div className="flex-1 flex flex-wrap items-center gap-x-3 gap-y-1">
-
-                    {/* NAME */}
-                    <span
-                      className="font-medium cursor-pointer hover:underline"
-                      onClick={() => openProfile(c.profiles?.id!)}
+                    {/* AVATAR */}
+                    <div
+                      className="w-8 h-8 rounded-full bg-gray-300 overflow-hidden flex-shrink-0
+  cursor-pointer hover:opacity-80 transition"
+                      onClick={() => {
+                        if (!c.profiles?.id) return
+                        openProfile(c.profiles.id)
+                      }}
                     >
-                      {c.profiles?.display_name || c.profiles?.username || 'User'}
-                    </span>
+                      {c.profiles?.avatar_url && (
+                        <img
+                          src={c.profiles.avatar_url}
+                          className="w-full h-full object-cover"
+                        />
+                      )}
+                    </div>
 
-                    {/* TIMESTAMP */}
-                    <button
-                      className="text-xs text-gray-500 underline"
-                      onClick={() => seekActiveVideo(c.second)}
-                    >
-                      {c.second === 0 ? 'Overall' : `${c.second}s`}
-                    </button>
+                    {/* ROW 1 CONTENT */}
+                    <div className="flex-1 flex flex-wrap items-center gap-x-3 gap-y-1">
 
-                    {/* ISSUE */}
-                    <span className="text-xs font-medium bg-gray-100 px-2 py-0.5 rounded">
-                      {c.issue}
-                    </span>
-
-                    {/* SUGGESTION */}
-                    {/* SUGGESTION */}
-                    {editingCommentId === c.id ? (
-                      <input
-                        className="border px-2 py-1 text-sm w-full max-w-md"
-                        value={editDraft.suggestion}
-                        onChange={e =>
-                          setEditDraft(prev => ({
-                            ...prev,
-                            suggestion: e.target.value,
-                          }))
-                        }
-                      />
-                    ) : (
-                      <span className="text-gray-700">
-                        {c.suggestion}
-                      </span>
-                    )}
-
-                    {/* ACTIONS */}
-                    <div className="flex gap-3 text-xs items-center">
-
-                      {/* 👍 LIKE */}
-                      <button
-                        className="underline"
-                        onClick={async () => {
-                          if (!requireAuth()) return
-
-                          await supabase
-                            .from('comment_likes')
-                            .insert({
-                              user_id: user?.id,
-                              comment_id: c.id,
-                            })
-
-                          await supabase.from('notifications').insert([
-                            {
-                              user_id: c.user_id,
-                              actor_id: user.id,
-                              type: 'comment_like',
-                              attempt_id: c.attempt_id,
-                              comment_id: c.id,
-                              message: 'Someone liked your suggestion',
-                            },
-                            {
-                              user_id: activeProfileAttempt.user_id,
-                              actor_id: user.id,
-                              type: 'comment_like',
-                              attempt_id: c.attempt_id,
-                              comment_id: c.id,
-                              message: 'Someone liked a suggestion on your video',
-                            },
-                          ])
-
-                          fetchComments(activeProfileAttempt.id)
+                      {/* NAME */}
+                      <span
+                        className={`font-medium ${c.profiles?.id ? 'cursor-pointer hover:underline' : ''}`}
+                        onClick={() => {
+                          if (!c.profiles?.id) return
+                          openProfile(c.profiles.id)
                         }}
                       >
-                        👍 {c.comment_likes?.length ?? 0}
+                        {c.profiles?.display_name || c.profiles?.username || 'User'}
+                      </span>
+
+                      {/* TIMESTAMP */}
+                      <button
+                        className="text-xs text-gray-500 underline"
+                        onClick={() => seekActiveVideo(c.second)}
+                      >
+                        {c.second === 0 ? 'Overall' : `${c.second}s`}
                       </button>
 
-                      {(c.comment_likes?.length ?? 0) > 0 && (
-                        <button
-                          className="underline text-gray-600"
-                          onClick={() =>
-                            setShowLikesForComment(
-                              showLikesForComment === c.id ? null : c.id
-                            )
+                      {/* ISSUE */}
+                      <span className="text-xs font-medium bg-gray-100 px-2 py-0.5 rounded">
+                        {c.issue}
+                      </span>
+
+                      {/* SUGGESTION */}
+                      {/* SUGGESTION */}
+                      {editingCommentId === c.id ? (
+                        <input
+                          className="border px-2 py-1 text-sm w-full max-w-md"
+                          value={editDraft.suggestion}
+                          onChange={e =>
+                            setEditDraft(prev => ({
+                              ...prev,
+                              suggestion: e.target.value,
+                            }))
                           }
-                        >
-                          See likes
-                        </button>
+                        />
+                      ) : (
+                        <span className="text-gray-700">
+                          {c.suggestion}
+                        </span>
                       )}
 
-                      {/* EDIT */}
-                      {c.user_id === user.id && editingCommentId !== c.id && (
-                        <button
-                          className="underline"
-                          onClick={() => {
-                            if (!requireAuth()) return
-                            setEditingCommentId(c.id)
-                            setEditDraft({
-                              second: c.second,
-                              issue: c.issue,
-                              suggestion: c.suggestion,
-                            })
-                          }}
-                        >
-                          Edit
-                        </button>
-                      )}
+                      {/* ACTIONS */}
+                      <div className="flex gap-3 text-xs items-center">
 
-                      {/* SAVE */}
-                      {c.user_id === user.id && editingCommentId === c.id && (
+                        {/* 👍 LIKE */}
                         <button
                           className="underline"
                           onClick={async () => {
                             if (!requireAuth()) return
-                            await supabase
-                              .from('comments')
-                              .update({ suggestion: editDraft.suggestion })
-                              .eq('id', c.id)
 
-                            setEditingCommentId(null)
+                            await supabase
+                              .from('comment_likes')
+                              .insert({
+                                user_id: user?.id,
+                                comment_id: c.id,
+                              })
+
+                            await supabase.from('notifications').insert([
+                              {
+                                user_id: c.user_id,
+                                actor_id: user.id,
+                                type: 'comment_like',
+                                attempt_id: c.attempt_id,
+                                comment_id: c.id,
+                                message: 'Someone liked your suggestion',
+                              },
+                              {
+                                user_id: activeProfileAttempt.user_id,
+                                actor_id: user.id,
+                                type: 'comment_like',
+                                attempt_id: c.attempt_id,
+                                comment_id: c.id,
+                                message: 'Someone liked a suggestion on your video',
+                              },
+                            ])
+
                             fetchComments(activeProfileAttempt.id)
                           }}
                         >
-                          Save
+                          👍 {c.comment_likes?.length ?? 0}
                         </button>
-                      )}
 
-                      {/* DELETE */}
-                      {(c.user_id === user.id ||
-                        activeProfileAttempt.user_id === user.id) && (
+                        {(c.comment_likes?.length ?? 0) > 0 && (
                           <button
-                            className="underline text-red-600"
-                            onClick={() => deleteComment(c.id)}
+                            className="underline text-gray-600"
+                            onClick={() =>
+                              setShowLikesForComment(
+                                showLikesForComment === c.id ? null : c.id
+                              )
+                            }
                           >
-                            Delete
+                            See likes
                           </button>
                         )}
+
+                        {/* EDIT */}
+                        {c.user_id === user.id && editingCommentId !== c.id && (
+                          <button
+                            className="underline"
+                            onClick={() => {
+                              if (!requireAuth()) return
+                              setEditingCommentId(c.id)
+                              setEditDraft({
+                                second: c.second,
+                                issue: c.issue,
+                                suggestion: c.suggestion,
+                              })
+                            }}
+                          >
+                            Edit
+                          </button>
+                        )}
+
+                        {/* SAVE */}
+                        {c.user_id === user.id && editingCommentId === c.id && (
+                          <button
+                            className="underline"
+                            onClick={async () => {
+                              if (!requireAuth()) return
+                              await supabase
+                                .from('comments')
+                                .update({ suggestion: editDraft.suggestion })
+                                .eq('id', c.id)
+
+                              setEditingCommentId(null)
+                              fetchComments(activeProfileAttempt.id)
+                            }}
+                          >
+                            Save
+                          </button>
+                        )}
+
+                        {/* DELETE */}
+                        {(c.user_id === user.id ||
+                          activeProfileAttempt.user_id === user.id) && (
+                            <button
+                              className="underline text-red-600"
+                              onClick={() => deleteComment(c.id)}
+                            >
+                              Delete
+                            </button>
+                          )}
+                      </div>
                     </div>
                   </div>
-                </div>
-                {showLikesForComment === c.id && (
-                  <div className="ml-11 mt-2 space-y-2 text-xs">
-                    {c.comment_likes?.map(like => {
-                      const p = feedProfiles[like.user_id]
-                      if (!p) return null
+                  {showLikesForComment === c.id && (
+                    <div className="ml-11 mt-2 space-y-2 text-xs">
+                      {c.comment_likes?.map(like => {
+                        const p = feedProfiles[like.user_id]
+                        if (!p) return null
 
-                      return (
-                        <div
-                          key={like.user_id}
-                          className="flex items-center gap-2 cursor-pointer hover:opacity-80"
-                          onClick={() => openProfile(like.user_id)}
-                        >
-                          <div className="w-6 h-6 rounded-full bg-gray-300 overflow-hidden">
-                            {p.avatar_url && (
-                              <img
-                                src={p.avatar_url}
-                                className="w-full h-full object-cover"
-                              />
-                            )}
+                        return (
+                          <div
+                            key={like.user_id}
+                            className="flex items-center gap-2 cursor-pointer hover:opacity-80"
+                            onClick={() => openProfile(like.user_id)}
+                          >
+                            <div className="w-6 h-6 rounded-full bg-gray-300 overflow-hidden">
+                              {p.avatar_url && (
+                                <img
+                                  src={p.avatar_url}
+                                  className="w-full h-full object-cover"
+                                />
+                              )}
+                            </div>
+                            <span className="underline">
+                              {p.username}
+                            </span>
                           </div>
-                          <span className="underline">
-                            {p.username}
-                          </span>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-
-                {/* ================= ROW 2 ================= */}
-                <div className="ml-11 mt-2 flex gap-6 text-xs">
-
-                  {activeProfileAttempt.user_id === user.id && !c.corrected_at && (
-                    <button
-                      className="underline"
-                      onClick={() =>
-                        setCorrectionState({ commentId: c.id, file: null })
-                      }
-                    >
-                      Attempt correction
-                    </button>
+                        )
+                      })}
+                    </div>
                   )}
 
-                  {activeProfileAttempt.user_id === user.id &&
-                    c.user_id !== user.id &&
-                    !c.clarification && (
+                  {/* ================= ROW 2 ================= */}
+                  <div className="ml-11 mt-2 flex gap-6 text-xs">
+
+                    {activeProfileAttempt.user_id === user.id && !c.corrected_at && (
                       <button
                         className="underline"
-                        onClick={() => {
-                          if (!requireAuth()) return
-                          setClarifyingCommentId(c.id)
-                          setClarificationDraft('')
-                        }}
+                        onClick={() =>
+                          setCorrectionState({ commentId: c.id, file: null })
+                        }
                       >
-                        Ask clarification
+                        Attempt correction
                       </button>
                     )}
-                  {clarifyingCommentId === c.id && (
-                    <div className="ml-11 mt-2 space-y-1 text-xs">
-                      <input
-                        className="border p-1 w-full"
-                        placeholder="Ask clarification (max 200 chars)"
-                        maxLength={200}
-                        value={clarificationDraft}
-                        onChange={e => setClarificationDraft(e.target.value)}
-                      />
-                      <button
-                        className="underline"
-                        onClick={async () => {
-                          if (!clarificationDraft.trim()) return
 
-                          await supabase
-                            .from('comments')
-                            .update({ clarification: clarificationDraft })
-                            .eq('id', c.id)
-
-                          // 🔔 NOTIFY COMMENT AUTHOR
-                          await supabase.from('notifications').insert({
-                            user_id: c.user_id,
-                            actor_id: user.id,
-                            type: 'clarification_request',
-                            attempt_id: c.attempt_id,
-                            comment_id: c.id,
-                            message: 'User asked for clarification on your suggestion',
-                          })
-
-                          setClarifyingCommentId(null)
-                          setClarificationDraft('')
-                          fetchComments(activeProfileAttempt.id)
-                        }}
-                      >
-                        Submit
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                {/* ================= ROW 3 ================= */}
-                {/* ================= ROW 3 ================= */}
-                {c.clarification && (
-                  <div className="ml-11 mt-2 space-y-2 text-xs text-gray-700">
-
-                    {/* USER CLARIFICATION */}
-                    <div className="italic">
-                      Clarification: {c.clarification}
-                    </div>
-
-                    {/* COACH REPLY BUTTON */}
-                    {viewerRole === 'coach' &&
-                      c.user_id === user.id && // coach is comment author
-                      !c.clarified_at && (
+                    {activeProfileAttempt.user_id === user.id &&
+                      c.user_id !== user.id &&
+                      !c.clarification && (
                         <button
                           className="underline"
                           onClick={() => {
                             if (!requireAuth()) return
-                            setReplyingCommentId(c.id)
-                            setReplyDraft('')
+                            setClarifyingCommentId(c.id)
+                            setClarificationDraft('')
                           }}
                         >
-                          Reply
+                          Ask clarification
                         </button>
                       )}
-
-                    {/* COACH REPLY INPUT */}
-                    {replyingCommentId === c.id && !c.clarified_at && (
-                      <div className="space-y-1">
+                    {clarifyingCommentId === c.id && (
+                      <div className="ml-11 mt-2 space-y-1 text-xs">
                         <input
                           className="border p-1 w-full"
-                          placeholder="Reply to clarification (max 200 chars)"
+                          placeholder="Ask clarification (max 200 chars)"
                           maxLength={200}
-                          value={replyDraft}
-                          onChange={e => setReplyDraft(e.target.value)}
+                          value={clarificationDraft}
+                          onChange={e => setClarificationDraft(e.target.value)}
                         />
-
                         <button
                           className="underline"
                           onClick={async () => {
-                            if (!replyDraft.trim()) return
+                            if (!clarificationDraft.trim()) return
 
                             await supabase
                               .from('comments')
-                              .update({
-                                suggestion: replyDraft,          // overwrite suggestion
-                                clarified_by: user.id,
-                                clarified_at: new Date().toISOString(),
-                              })
+                              .update({ clarification: clarificationDraft })
                               .eq('id', c.id)
+
+                            // 🔔 NOTIFY COMMENT AUTHOR
                             await supabase.from('notifications').insert({
-                              user_id: activeProfileAttempt.user_id,
+                              user_id: c.user_id,
                               actor_id: user.id,
-                              type: 'clarification_reply',
+                              type: 'clarification_request',
                               attempt_id: c.attempt_id,
                               comment_id: c.id,
-                              message: 'Coach replied to your clarification request',
+                              message: 'User asked for clarification on your suggestion',
                             })
 
-                            setReplyingCommentId(null)
-                            setReplyDraft('')
+                            setClarifyingCommentId(null)
+                            setClarificationDraft('')
                             fetchComments(activeProfileAttempt.id)
                           }}
                         >
-                          Submit reply
+                          Submit
                         </button>
-
-
-                      </div>
-                    )}
-
-                    {/* FINAL COACH REPLY (READ-ONLY) */}
-                    {c.clarified_at && (
-                      <div className="text-gray-800">
-                        Coach reply: {c.suggestion}
                       </div>
                     )}
                   </div>
-                )}
-              </div>
-            ))}
+
+                  {/* ================= ROW 3 ================= */}
+                  {/* ================= ROW 3 ================= */}
+                  {c.clarification && (
+                    <div className="ml-11 mt-2 space-y-2 text-xs text-gray-700">
+
+                      {/* USER CLARIFICATION */}
+                      <div className="italic">
+                        Clarification: {c.clarification}
+                      </div>
+
+                      {/* COACH REPLY BUTTON */}
+                      {viewerRole === 'coach' &&
+                        c.user_id === user.id && // coach is comment author
+                        !c.clarified_at && (
+                          <button
+                            className="underline"
+                            onClick={() => {
+                              if (!requireAuth()) return
+                              setReplyingCommentId(c.id)
+                              setReplyDraft('')
+                            }}
+                          >
+                            Reply
+                          </button>
+                        )}
+
+                      {/* COACH REPLY INPUT */}
+                      {replyingCommentId === c.id && !c.clarified_at && (
+                        <div className="space-y-1">
+                          <input
+                            className="border p-1 w-full"
+                            placeholder="Reply to clarification (max 200 chars)"
+                            maxLength={200}
+                            value={replyDraft}
+                            onChange={e => setReplyDraft(e.target.value)}
+                          />
+
+                          <button
+                            className="underline"
+                            onClick={async () => {
+                              if (!replyDraft.trim()) return
+
+                              await supabase
+                                .from('comments')
+                                .update({
+                                  suggestion: replyDraft,          // overwrite suggestion
+                                  clarified_by: user.id,
+                                  clarified_at: new Date().toISOString(),
+                                })
+                                .eq('id', c.id)
+                              await supabase.from('notifications').insert({
+                                user_id: activeProfileAttempt.user_id,
+                                actor_id: user.id,
+                                type: 'clarification_reply',
+                                attempt_id: c.attempt_id,
+                                comment_id: c.id,
+                                message: 'Coach replied to your clarification request',
+                              })
+
+                              setReplyingCommentId(null)
+                              setReplyDraft('')
+                              fetchComments(activeProfileAttempt.id)
+                            }}
+                          >
+                            Submit reply
+                          </button>
+
+
+                        </div>
+                      )}
+
+                      {/* FINAL COACH REPLY (READ-ONLY) */}
+                      {c.clarified_at && (
+                        <div className="text-gray-800">
+                          Coach reply: {c.suggestion}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
           </div>
 
         </div>

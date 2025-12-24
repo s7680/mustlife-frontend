@@ -3378,15 +3378,15 @@ export default function Home() {
                     )}
                   </div>
 
-                  <div className="text-sm">
-                    <div className="font-medium">
-                      {feedProfiles[attempt.user_id]?.username ?? 'User'}
-                    </div>
-                    <div className="text-xs text-gray-500">
-                      {skills.find(s => s.id === attempt.skill_id)?.community}
-                      {' → '}
-                      {skills.find(s => s.id === attempt.skill_id)?.name}
-                    </div>
+                  <div
+                    className="font-medium cursor-pointer hover:underline"
+                    onClick={e => {
+                      e.stopPropagation()
+                      openProfile(attempt.user_id)
+                      fetchUserUploads(attempt.user_id)
+                    }}
+                  >
+                    {feedProfiles[attempt.user_id]?.username ?? 'User'}
                   </div>
                   <div className="text-[11px] text-gray-400">
                     {formatIST(attempt.created_at)}

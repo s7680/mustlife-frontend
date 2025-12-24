@@ -146,6 +146,7 @@ export default function Home() {
   const [checkingUsername, setCheckingUsername] = useState(false)
   const [user, setUser] = useState<any>(null)
   const safeUserId = user && user.id !== 'guest' ? user.id : null
+  const isGuest = user?.id === 'guest'
   // ===== PROFILE META (TEMP / UI ONLY) =====
   const [showProfile, setShowProfile] = useState(false)
   const [viewedUserId, setViewedUserId] = useState<string | null>(null)
@@ -225,7 +226,7 @@ export default function Home() {
   useEffect(() => {
     if (compareAttempts.length === 2) {
       const ids = compareAttempts.map(a => a.id).join(',')
-      window.location.href = `/compare?ids=${ids}`
+      window.location.href = '/issues'
     }
   }, [compareAttempts])
   useEffect(() => {
@@ -234,7 +235,12 @@ export default function Home() {
   }, [activeProfileAttempt])
 
   useEffect(() => {
-    document.querySelectorAll('video').forEach(v => {
+    if (typeof window === 'undefined') return
+
+    const videos = document.querySelectorAll('video')
+    if (!videos.length) return
+
+    videos.forEach(v => {
       try {
         v.playbackRate = globalPlaybackRate
       } catch { }
@@ -328,7 +334,7 @@ export default function Home() {
         .from('profiles')
         .select('id')
         .eq('public_id', publicId)
-        .neq('id', user.id)
+        .neq('id', user?.id ?? '')
         .maybeSingle()
 
       setPublicIdStatus(data ? 'taken' : 'available')
@@ -355,6 +361,8 @@ export default function Home() {
     }
 
     supabase.auth.getUser().then(({ data }) => {
+      if (user?.id === 'guest') return   // 🚫 do nothing
+
       if (data?.user && !isRecoveryFlow) {
         setUser(data.user)
       }
@@ -363,13 +371,12 @@ export default function Home() {
 
     const { data: listener } = supabase.auth.onAuthStateChange(
       (_event, session) => {
-        // 🔹 BLOCK normal login flow during recovery
         if (type === 'recovery') return
         if (isRecoveryFlow) return
-        if (user?.id !== 'guest') {
-          setUser(session?.user ?? null)
-          setAuthLoading(false)
-        }
+        if (user?.id === 'guest') return
+
+        setUser(session?.user ?? null)
+        setAuthLoading(false)
 
         if (session?.user && session?.access_token) {
           if (authMode === 'verify_email') {
@@ -437,7 +444,7 @@ export default function Home() {
       })
   }, [profileUserId])
   useEffect(() => {
-    if (!user || !profileUserId || isOwnProfile) return
+    if (!user || isGuest || !profileUserId || isOwnProfile) return
 
     supabase
       .from('followers')
@@ -538,7 +545,7 @@ export default function Home() {
     setSkillIssues(grouped)
   }
   async function getFollowingUserIds() {
-    if (!user) return []
+    if (!user || isGuest) return []
 
     const { data, error } = await supabase
       .from('followers')
@@ -650,7 +657,7 @@ export default function Home() {
         .in('user_id', followingIds)
         .order('created_at', { ascending: false })
     }
-    q = q.order('created_at', { ascending: false })
+
     const { data } = await q
     let filtered = data ?? []
 
@@ -742,7 +749,7 @@ export default function Home() {
   }
   // ===== FETCH USER UPLOADS (ADDED) =====
   async function fetchUserUploads(forUserId?: string) {
-    if (!user || isGuest) return
+    if (isGuest && !forUserId) return
 
     const { data, error } = await supabase
       .from('attempts')
@@ -1344,9 +1351,20 @@ export default function Home() {
       )
 
       if (comment) {
+        // 1️⃣ Fetch comment author's current impact
+        const { data: author } = await supabase
+          .from('profiles')
+          .select('impact')
+          .eq('id', comment.user_id)
+          .maybeSingle()
+
+        // 2️⃣ Increment safely
+        const newImpact = (author?.impact ?? 0) + 5
+
+        // 3️⃣ Update correct user
         await supabase
           .from('profiles')
-          .update({ impact: impactScore + 5 })
+          .update({ impact: newImpact })
           .eq('id', comment.user_id)
       }
 
@@ -1601,14 +1619,16 @@ export default function Home() {
 
               {/* ACTIVE ATTEMPT */}
 
-              {user && activeProfileAttempt.user_id === user.id && (
-                <button
-                  className="mt-2 text-xs text-red-600 underline cursor-pointer hover:text-red-700 transition"
-                  onClick={() => deleteAttempt(activeProfileAttempt.id)}
-                >
-                  Delete this video
-                </button>
-              )}
+              {user &&
+                !isGuest &&
+                activeProfileAttempt.user_id === user.id && (
+                  <button
+                    className="mt-2 text-xs text-red-600 underline cursor-pointer hover:text-red-700 transition"
+                    onClick={() => deleteAttempt(activeProfileAttempt.id)}
+                  >
+                    Delete this video
+                  </button>
+                )}
             </div>
 
             {/* ================= RIGHT COLUMN — COMMENTS ================= */}
@@ -1711,9 +1731,15 @@ export default function Home() {
                           suggestion: d.suggestion,
                         })
                         .select(`
-                           *,
-                         comment_likes(user_id)
-                         `)
+  *,
+  profiles (
+    id,
+    display_name,
+    username,
+    avatar_url
+  ),
+  comment_likes(user_id)
+`)
                         .single()
 
                       if (error) {
@@ -1951,7 +1977,7 @@ export default function Home() {
                         )}
 
                         {/* EDIT */}
-                        {c.user_id === user.id && editingCommentId !== c.id && (
+                        {safeUserId === c.user_id && editingCommentId !== c.id && (
                           <button
                             className="underline"
                             onClick={() => {
@@ -1969,7 +1995,7 @@ export default function Home() {
                         )}
 
                         {/* SAVE */}
-                        {c.user_id === user.id && editingCommentId === c.id && (
+                       {safeUserId === c.user_id && editingCommentId === c.id && (
                           <button
                             className="underline"
                             onClick={async () => {
@@ -1988,8 +2014,9 @@ export default function Home() {
                         )}
 
                         {/* DELETE */}
-                        {(c.user_id === user.id ||
-                          activeProfileAttempt.user_id === user.id) && (
+                       {safeUserId &&
+  (c.user_id === safeUserId ||
+    activeProfileAttempt.user_id === safeUserId) && (
                             <button
                               className="underline text-red-600"
                               onClick={() => deleteComment(c.id)}
@@ -2031,19 +2058,21 @@ export default function Home() {
 
                   {/* ================= ROW 2 ================= */}
                   <div className="ml-11 mt-2 flex gap-6 text-xs">
+                    {safeUserId === activeProfileAttempt.user_id &&
+  !c.corrected_at && (
+                        <button
+                          className="underline"
+                          onClick={() =>
+                            setCorrectionState({ commentId: c.id, file: null })
+                          }
+                        >
+                          Attempt correction
+                        </button>
+                      )}
 
-                    {activeProfileAttempt.user_id === user.id && !c.corrected_at && (
-                      <button
-                        className="underline"
-                        onClick={() =>
-                          setCorrectionState({ commentId: c.id, file: null })
-                        }
-                      >
-                        Attempt correction
-                      </button>
-                    )}
-
-                    {activeProfileAttempt.user_id === user.id &&
+                    {user &&
+                      !isGuest &&
+                      activeProfileAttempt.user_id === user.id &&
                       c.user_id !== user.id &&
                       !c.clarification && (
                         <button
@@ -2108,8 +2137,10 @@ export default function Home() {
                       </div>
 
                       {/* COACH REPLY BUTTON */}
-                      {viewerRole === 'coach' &&
-                        c.user_id === user.id && // coach is comment author
+                      {user &&
+                        !isGuest &&
+                        viewerRole === 'coach' &&
+                        c.user_id === user.id &&
                         !c.clarified_at && (
                           <button
                             className="underline"
@@ -3001,7 +3032,7 @@ export default function Home() {
                         className={`text-xs underline mb-3 cursor-pointer hover:text-black transition
   ${includeCaption ? 'text-green-600' : ''}
 `}
-                        onClick={() => setIncludeCaption(true)}
+                        onClick={() => setIncludeCaption(v => !v)}
                       >
                         Include text
                       </button>
@@ -3342,17 +3373,19 @@ export default function Home() {
                 className="bg-white border rounded-xl p-4"
               >
 
-                {attempt.user_id === user?.id && (
-                  <button
-                    className="text-xs text-red-600 underline float-right"
-                    onClick={e => {
-                      e.stopPropagation()
-                      deleteAttempt(attempt.id)
-                    }}
-                  >
-                    Delete
-                  </button>
-                )}
+                {user &&
+                  !isGuest &&
+                  attempt.user_id === user.id && (
+                    <button
+                      className="text-xs text-red-600 underline float-right"
+                      onClick={e => {
+                        e.stopPropagation()
+                        deleteAttempt(attempt.id)
+                      }}
+                    >
+                      Delete
+                    </button>
+                  )}
                 {/* HEADER (NEW) */}
                 <div className="flex items-center gap-3 mb-2">
                   <div

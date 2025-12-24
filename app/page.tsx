@@ -1635,7 +1635,7 @@ export default function Home() {
 
               {/* ACTIVE ATTEMPT */}
 
-              {activeProfileAttempt.user_id === user.id && (
+              {user && activeProfileAttempt.user_id === user.id && (
                 <button
                   className="mt-2 text-xs text-red-600 underline cursor-pointer hover:text-red-700 transition"
                   onClick={() => deleteAttempt(activeProfileAttempt.id)}
@@ -1738,7 +1738,7 @@ export default function Home() {
                       const { data: newComment, error } = await supabase
                         .from('comments')
                         .insert({
-                          user_id: user.id,
+                          user_id: user?.id,
                           attempt_id: activeProfileAttempt.id,
                           second: d.second === -1 ? 0 : d.second,
                           issue: d.issue,
@@ -1934,7 +1934,7 @@ export default function Home() {
                           await supabase
                             .from('comment_likes')
                             .insert({
-                              user_id: user.id,
+                              user_id: user?.id,
                               comment_id: c.id,
                             })
 
@@ -2336,12 +2336,23 @@ export default function Home() {
           )}
         </div>
 
-        <button
-          onClick={logout}
-          className="text-sm underline cursor-pointer hover:text-black transition"
-        >
-          Logout
-        </button>
+        {(!user || isGuest) ? (
+          <button
+            onClick={() => {
+              window.location.href = '/login'
+            }}
+            className="text-sm underline cursor-pointer hover:text-black transition"
+          >
+            Login
+          </button>
+        ) : (
+          <button
+            onClick={logout}
+            className="text-sm underline cursor-pointer hover:text-black transition"
+          >
+            Logout
+          </button>
+        )}
       </header>
       {/* ================= PROFILE PANEL (ADDED) ================= */}
       {showProfile && !activeProfileAttempt && (

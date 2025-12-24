@@ -724,7 +724,7 @@ export default function Home() {
 
     setComments(prev => ({
       ...prev,
-      [attemptId]: res.data ?? [],
+      [attemptId]: (res.data ?? []).filter(c => c && c.id),
     }))
   }
   async function fetchAllProfileComments(profileUserId: string) {
@@ -2677,18 +2677,21 @@ export default function Home() {
                           Record<string, Record<string, number>>
                         > = {}
 
-                        Object.values(comments).flat().forEach(c => {
-                          const attempt = feed.find(a => a.id === c.attempt_id)
-                          if (!attempt) return
+                        Object.values(comments)
+                          .flat()
+                          .filter(c => c && c.id)
+                          .forEach(c => {
+                            const attempt = feed.find(a => a.id === c.attempt_id)
+                            if (!attempt) return
 
-                          const skill = skills.find(s => s.id === attempt.skill_id)
-                          if (!skill) return
+                            const skill = skills.find(s => s.id === attempt.skill_id)
+                            if (!skill) return
 
-                          grouped[skill.community] ??= {}
-                          grouped[skill.community][skill.name] ??= {}
-                          grouped[skill.community][skill.name][c.issue] =
-                            (grouped[skill.community][skill.name][c.issue] || 0) + 1
-                        })
+                            grouped[skill.community] ??= {}
+                            grouped[skill.community][skill.name] ??= {}
+                            grouped[skill.community][skill.name][c.issue] =
+                              (grouped[skill.community][skill.name][c.issue] || 0) + 1
+                          })
 
                         const communities = Object.keys(grouped)
                         if (communities.length === 0) {
@@ -2737,22 +2740,25 @@ export default function Home() {
                           Record<string, { fixed: number; pending: number }>
                         > = {}
 
-                        Object.values(comments).flat().forEach(c => {
-                          const attempt = feed.find(a => a.id === c.attempt_id)
-                          if (!attempt) return
+                        Object.values(comments)
+                          .flat()
+                          .filter(c => c && c.id)
+                          .forEach(c => {
+                            const attempt = feed.find(a => a.id === c.attempt_id)
+                            if (!attempt) return
 
-                          const skill = skills.find(s => s.id === attempt.skill_id)
-                          if (!skill) return
+                            const skill = skills.find(s => s.id === attempt.skill_id)
+                            if (!skill) return
 
-                          grouped[skill.community] ??= {}
-                          grouped[skill.community][skill.name] ??= { fixed: 0, pending: 0 }
+                            grouped[skill.community] ??= {}
+                            grouped[skill.community][skill.name] ??= { fixed: 0, pending: 0 }
 
-                          if (c.corrected_at) {
-                            grouped[skill.community][skill.name].fixed += 1
-                          } else {
-                            grouped[skill.community][skill.name].pending += 1
-                          }
-                        })
+                            if (c.corrected_at) {
+                              grouped[skill.community][skill.name].fixed += 1
+                            } else {
+                              grouped[skill.community][skill.name].pending += 1
+                            }
+                          })
 
                         const communities = Object.keys(grouped)
                         if (communities.length === 0) {

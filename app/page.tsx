@@ -414,17 +414,18 @@ export default function Home() {
 
   // ===== RESTORE PROFILE VIEW AFTER REFRESH =====
   useEffect(() => {
-    if (!user || authLoading) return
+  if (!user || authLoading) return
 
-    const view = localStorage.getItem('mustlife:view')
-    const pid = localStorage.getItem('mustlife:profileUserId')
+  fetchNotifications()   // ✅ ALWAYS fetch once after login
 
-    if (view === 'profile' && pid) {
-      openProfile(pid)
-      fetchUserUploads(pid)
-      fetchNotifications()
-    }
-  }, [user, authLoading])
+  const view = localStorage.getItem('mustlife:view')
+  const pid = localStorage.getItem('mustlife:profileUserId')
+
+  if (view === 'profile' && pid) {
+    openProfile(pid)
+    fetchUserUploads(pid)
+  }
+}, [user, authLoading])
 
   // 🔹 FETCH PROFILE DATA (avatar + bio)
   useEffect(() => {
@@ -757,10 +758,20 @@ export default function Home() {
     const roots = all.filter(c => !c.parent_comment_id)
     const children = all.filter(c => c.parent_comment_id)
 
-    const grouped = roots.map(root => ({
-      ...root,
-      children: children.filter(ch => ch.parent_comment_id === root.id),
-    }))
+    const grouped = roots.map(root => {
+      const directChildren = children.filter(
+        ch => ch.parent_comment_id === root.id
+      )
+
+      const replies = children.filter(ch =>
+        directChildren.some(dc => dc.id === ch.parent_comment_id)
+      )
+
+      return {
+        ...root,
+        children: [...directChildren, ...replies],
+      }
+    })
     // 🔼 ADD EXACTLY HERE (END)
 
     setComments(prev => ({
@@ -2213,7 +2224,53 @@ export default function Home() {
                               {formatIST(child.created_at)}
                             </span>
                           </div>
+
                           <div>{child.suggestion}</div>
+
+                          {/* REPLY BUTTON — ONLY ORIGINAL COMMENTER */}
+                          {safeUserId === c.user_id &&
+                            child.issue === 'CLARIFICATION' && (
+                              <button
+                                className="underline text-[11px] mt-1"
+                                onClick={() => {
+                                  setReplyingCommentId(child.id)
+                                  setReplyDraft('')
+                                }}
+                              >
+                                Reply
+                              </button>
+                            )}
+                          {replyingCommentId === child.id && (
+                            <div className="mt-1 space-y-1">
+                              <input
+                                className="border p-1 w-full text-xs"
+                                placeholder="Write reply"
+                                value={replyDraft}
+                                onChange={e => setReplyDraft(e.target.value)}
+                              />
+                              <button
+                                className="underline text-[11px]"
+                                onClick={async () => {
+                                  if (!replyDraft.trim()) return
+
+                                  await supabase.from('comments').insert({
+                                    user_id: user.id,
+                                    attempt_id: c.attempt_id,
+                                    parent_comment_id: child.id,
+                                    issue: 'CLARIFICATION',
+                                    suggestion: replyDraft,
+                                    second: c.second,
+                                  })
+
+                                  setReplyingCommentId(null)
+                                  setReplyDraft('')
+                                  fetchComments(activeProfileAttempt.id)
+                                }}
+                              >
+                                Submit reply
+                              </button>
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -2341,6 +2398,7 @@ export default function Home() {
                       if (attempt) {
                         setActiveProfileAttempt(attempt)
                         setShowProfile(false)
+                        fetchComments(attempt.id) 
                       }
                     }
                   }}

@@ -1710,6 +1710,37 @@ export default function Home() {
                     Delete this video
                   </button>
                 )}
+                {user &&
+  !isGuest &&
+  activeProfileAttempt.user_id === user.id && (
+    <>
+      <button
+        className="mt-2 text-xs text-red-600 underline cursor-pointer hover:text-red-700 transition"
+        onClick={() => deleteAttempt(activeProfileAttempt.id)}
+      >
+        Delete this video
+      </button>
+
+      {/* RE-ATTEMPT BUTTON */}
+      {!isReAttempt && (
+        <button
+          className="mt-2 border px-4 py-2 rounded text-sm"
+          onClick={() => {
+            setOriginalAttempt(
+              activeProfileAttempt?.parent_attempt_id
+                ? feed.find(a => a.id === activeProfileAttempt.parent_attempt_id) || activeProfileAttempt
+                : activeProfileAttempt
+            )
+
+            setIsReAttempt(true)
+            setReAttemptFile(null)
+          }}
+        >
+          Re-attempt
+        </button>
+      )}
+    </>
+  )}
             </div>
 
 
@@ -1717,24 +1748,6 @@ export default function Home() {
 
 
 
-          {/* RE-ATTEMPT BUTTON */}
-          {!isReAttempt && (
-            <button
-              className="border px-4 py-2 rounded text-sm"
-              onClick={() => {
-                setOriginalAttempt(
-                  activeProfileAttempt?.parent_attempt_id
-                    ? feed.find(a => a.id === activeProfileAttempt.parent_attempt_id) || activeProfileAttempt
-                    : activeProfileAttempt
-                )
-
-                setIsReAttempt(true)
-                setReAttemptFile(null)
-              }}
-            >
-              Re-attempt
-            </button>
-          )}
 
           {/* RE-ATTEMPT UPLOAD */}
           {isReAttempt && (

@@ -1710,81 +1710,81 @@ export default function Home() {
                     Delete this video
                   </button>
                 )}
-                {user &&
-  !isGuest &&
-  activeProfileAttempt.user_id === user.id && (
-    <>
-      <button
-        className="mt-2 text-xs text-red-600 underline cursor-pointer hover:text-red-700 transition"
-        onClick={() => deleteAttempt(activeProfileAttempt.id)}
-      >
-        Delete this video
-      </button>
+              {user &&
+                !isGuest &&
+                activeProfileAttempt.user_id === user.id && (
+                  <>
+                    <button
+                      className="mt-2 text-xs text-red-600 underline cursor-pointer hover:text-red-700 transition"
+                      onClick={() => deleteAttempt(activeProfileAttempt.id)}
+                    >
+                      Delete this video
+                    </button>
 
-      {/* RE-ATTEMPT BUTTON */}
-      {!isReAttempt && (
-        <button
-          className="mt-2 border px-4 py-2 rounded text-sm"
-          onClick={() => {
-            setOriginalAttempt(
-              activeProfileAttempt?.parent_attempt_id
-                ? feed.find(a => a.id === activeProfileAttempt.parent_attempt_id) || activeProfileAttempt
-                : activeProfileAttempt
-            )
+                    {/* RE-ATTEMPT BUTTON */}
+                    {!isReAttempt && (
+                      <button
+                        className="mt-2 border px-4 py-2 rounded text-sm"
+                        onClick={() => {
+                          setOriginalAttempt(
+                            activeProfileAttempt?.parent_attempt_id
+                              ? feed.find(a => a.id === activeProfileAttempt.parent_attempt_id) || activeProfileAttempt
+                              : activeProfileAttempt
+                          )
 
-            setIsReAttempt(true)
-            setReAttemptFile(null)
-          }}
-        >
-          Re-attempt
-        </button>
-      )}
-    </>
-  )}
+                          setIsReAttempt(true)
+                          setReAttemptFile(null)
+                        }}
+                      >
+                        Re-attempt
+                      </button>
+                    )}
+                  </>
+                )}
             </div>
 
 
-        
 
 
 
 
-          {/* RE-ATTEMPT UPLOAD */}
-          {isReAttempt && (
-            <div className="space-y-3">
 
-              <label className="block text-sm underline cursor-pointer">
-                Select re-attempt video
-                <input
-                  type="file"
-                  accept="video/*"
-                  className="hidden"
-                  onChange={e =>
-                    setReAttemptFile(e.target.files?.[0] || null)
-                  }
-                />
-              </label>
+            {/* RE-ATTEMPT UPLOAD */}
+            {isReAttempt && (
+              <div className="space-y-3">
 
-              <button
-                className="bg-black text-white px-4 py-2 rounded text-sm disabled:opacity-50"
-                disabled={!reAttemptFile}
-                onClick={handleReAttemptUpload}
-              >
-                Upload Re-attempt
-              </button>
-              {uploading && (
-                <div className="w-full h-2 bg-gray-200 rounded overflow-hidden">
-                  <div
-                    className="h-full bg-black transition-all"
-                    style={{ width: `${uploadProgress}%` }}
+                <label className="block text-sm underline cursor-pointer">
+                  Select re-attempt video
+                  <input
+                    type="file"
+                    accept="video/*"
+                    className="hidden"
+                    onChange={e =>
+                      setReAttemptFile(e.target.files?.[0] || null)
+                    }
                   />
-                </div>
-              )}
+                </label>
+
+                <button
+                  className="bg-black text-white px-4 py-2 rounded text-sm disabled:opacity-50"
+                  disabled={!reAttemptFile}
+                  onClick={handleReAttemptUpload}
+                >
+                  Upload Re-attempt
+                </button>
+                {uploading && (
+                  <div className="w-full h-2 bg-gray-200 rounded overflow-hidden">
+                    <div
+                      className="h-full bg-black transition-all"
+                      style={{ width: `${uploadProgress}%` }}
+                    />
+                  </div>
+                )}
 
 
-            </div>
-          )}
- {/* ================= RIGHT COLUMN — COMMENTS ================= */}
+              </div>
+            )}
+            {/* ================= RIGHT COLUMN — COMMENTS ================= */}
 
             {activeProfileAttempt.caption && (
               <div className="bg-white border rounded p-3 text-sm text-gray-700">
@@ -2302,7 +2302,7 @@ export default function Home() {
       )}
       <header className="sticky top-0 z-20 bg-[#FBF6EC]/90 backdrop-blur border-b border-gray-200
 px-4 py-2 md:px-6 md:py-4
-flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+flex flex-row items-center justify-between gap-3">
         <div className="flex items-center gap-2 md:gap-3">
           <span className="font-semibold text-lg">MUST_Life</span>
           <div

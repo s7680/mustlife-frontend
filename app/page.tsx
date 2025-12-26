@@ -1713,7 +1713,65 @@ export default function Home() {
             </div>
 
 
-            {/* ================= RIGHT COLUMN — COMMENTS ================= */}
+        
+
+
+
+          {/* RE-ATTEMPT BUTTON */}
+          {!isReAttempt && (
+            <button
+              className="border px-4 py-2 rounded text-sm"
+              onClick={() => {
+                setOriginalAttempt(
+                  activeProfileAttempt?.parent_attempt_id
+                    ? feed.find(a => a.id === activeProfileAttempt.parent_attempt_id) || activeProfileAttempt
+                    : activeProfileAttempt
+                )
+
+                setIsReAttempt(true)
+                setReAttemptFile(null)
+              }}
+            >
+              Re-attempt
+            </button>
+          )}
+
+          {/* RE-ATTEMPT UPLOAD */}
+          {isReAttempt && (
+            <div className="space-y-3">
+
+              <label className="block text-sm underline cursor-pointer">
+                Select re-attempt video
+                <input
+                  type="file"
+                  accept="video/*"
+                  className="hidden"
+                  onChange={e =>
+                    setReAttemptFile(e.target.files?.[0] || null)
+                  }
+                />
+              </label>
+
+              <button
+                className="bg-black text-white px-4 py-2 rounded text-sm disabled:opacity-50"
+                disabled={!reAttemptFile}
+                onClick={handleReAttemptUpload}
+              >
+                Upload Re-attempt
+              </button>
+              {uploading && (
+                <div className="w-full h-2 bg-gray-200 rounded overflow-hidden">
+                  <div
+                    className="h-full bg-black transition-all"
+                    style={{ width: `${uploadProgress}%` }}
+                  />
+                </div>
+              )}
+
+
+            </div>
+          )}
+ {/* ================= RIGHT COLUMN — COMMENTS ================= */}
 
             {activeProfileAttempt.caption && (
               <div className="bg-white border rounded p-3 text-sm text-gray-700">
@@ -1813,15 +1871,16 @@ export default function Home() {
                           suggestion: d.suggestion,
                         })
                         .select(`
-  *,
-  profiles (
-    id,
-    display_name,
-    username,
-    avatar_url
-  ),
-  comment_likes(user_id)
-`)
+                          *,
+                         profiles (
+                         id,
+                         display_name,
+                         username,
+                         avatar_url
+                         ),
+                         comment_likes(user_id)
+                         
+                         `)
                         .single()
 
                       if (error) {
@@ -1863,64 +1922,6 @@ export default function Home() {
             </div>
 
           </div>
-
-
-
-          {/* RE-ATTEMPT BUTTON */}
-          {!isReAttempt && (
-            <button
-              className="border px-4 py-2 rounded text-sm"
-              onClick={() => {
-                setOriginalAttempt(
-                  activeProfileAttempt?.parent_attempt_id
-                    ? feed.find(a => a.id === activeProfileAttempt.parent_attempt_id) || activeProfileAttempt
-                    : activeProfileAttempt
-                )
-
-                setIsReAttempt(true)
-                setReAttemptFile(null)
-              }}
-            >
-              Re-attempt
-            </button>
-          )}
-
-          {/* RE-ATTEMPT UPLOAD */}
-          {isReAttempt && (
-            <div className="space-y-3">
-
-              <label className="block text-sm underline cursor-pointer">
-                Select re-attempt video
-                <input
-                  type="file"
-                  accept="video/*"
-                  className="hidden"
-                  onChange={e =>
-                    setReAttemptFile(e.target.files?.[0] || null)
-                  }
-                />
-              </label>
-
-              <button
-                className="bg-black text-white px-4 py-2 rounded text-sm disabled:opacity-50"
-                disabled={!reAttemptFile}
-                onClick={handleReAttemptUpload}
-              >
-                Upload Re-attempt
-              </button>
-              {uploading && (
-                <div className="w-full h-2 bg-gray-200 rounded overflow-hidden">
-                  <div
-                    className="h-full bg-black transition-all"
-                    style={{ width: `${uploadProgress}%` }}
-                  />
-                </div>
-              )}
-
-
-            </div>
-          )}
-
           {/* ===== COMMENTS ===== */}
           <div className="mt-6 space-y-3">
             <div className="font-semibold text-sm">Comments</div>

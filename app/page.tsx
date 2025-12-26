@@ -213,6 +213,7 @@ export default function Home() {
   const [uploadProgress, setUploadProgress] = useState(0)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [queueMessage, setQueueMessage] = useState<string | null>(null)
 
   // ===== PROFILE VIDEO VIEW (ADDED) =====
 
@@ -1135,6 +1136,13 @@ export default function Home() {
         .insert(payload)
 
       if (attemptErr) throw attemptErr
+
+      // ✅ SHOW QUEUE MESSAGE ONLY FOR PROCESSED UPLOAD
+      if (uploadType === 'processed') {
+        setQueueMessage(
+          '⏳ Video queued for processing. It will reflect shortly in your profile.'
+        )
+      }
 
 
       setIncludeCaption(false)
@@ -3027,7 +3035,11 @@ export default function Home() {
                   <select
                     className="border p-2 w-full"
                     value={uploadType ?? ''}
-                    onChange={e => setUploadType(e.target.value as any)}
+                    onChange={e => {
+                      const v = e.target.value as any
+                      setUploadType(v)
+                      setQueueMessage(null)   // ✅ RESET MESSAGE
+                    }}
                   >
                     <option value="">Upload type</option>
                     <option value="raw">Upload raw video</option>
@@ -3090,6 +3102,12 @@ export default function Home() {
                 >
                   {uploading ? `Uploading ${uploadProgress}%` : 'Upload'}
                 </button>
+                {/* ✅ QUEUE MESSAGE */}
+                {queueMessage && (
+                  <div className="text-xs text-gray-600 mt-2">
+                    {queueMessage}
+                  </div>
+                )}
 
                 {/* Progress bar */}
                 {uploading && (

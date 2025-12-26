@@ -46,26 +46,28 @@ type Attempt = {
 }
 
 type AppComment = {
-  id: string            // 👈 comment row id (uuid)
-  user_id: string       // 👈 who wrote the comment
-  attempt_id: string    // 👈 which video
+  id: string
+  user_id: string
+  attempt_id: string
+  parent_comment_id?: string | null   // ✅ REQUIRED
   second: number
   issue: string
   issue_id?: string
   suggestion: string
+  created_at: string                  // ✅ REQUIRED
+
   corrected_at?: string | null
-  clarification?: string | null
-  clarified_by?: string | null
-  clarified_at?: string | null
-  username?: string
-  avatar_url?: string | null
+
   comment_likes?: { user_id: string }[]
+
   profiles?: {
     id: string
     display_name: string | null
     username: string | null
     avatar_url: string | null
   }
+
+  children?: AppComment[]              // ✅ REQUIRED FOR THREADING
 }
 function isValidComment(c: AppComment | null): c is AppComment {
   return Boolean(c && c.id && c.attempt_id)
@@ -206,7 +208,7 @@ export default function Home() {
   const [compareSkill, setCompareSkill] = useState<string | null>(null)
   const [compareAttempts, setCompareAttempts] = useState<Attempt[]>([])
   const [globalPlaybackRate, setGlobalPlaybackRate] = useState(1)
-  const filterAppliedTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const filterAppliedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   // ✅ AUTO-OPEN COMPARE VIEW WHEN 2 ATTEMPTS SELECTED
   useEffect(() => {
     if (compareAttempts.length === 2) {
@@ -214,7 +216,7 @@ export default function Home() {
       const b = compareAttempts[1].id
 
       // 🔁 redirect to compare page
-      window.location.href = `/compare?a=${a}&b=${b}`
+      window.location.href = `/compare?ids=${a},${b}`
 
       // cleanup
       setCompareSkill(null)
@@ -731,30 +733,39 @@ export default function Home() {
     const res = await supabase
       .from('comments')
       .select(`
-    *,
-    profiles (
-      id,
-      display_name,
-      username,
-      avatar_url
-    ),
-     comment_likes (
-      user_id
-    )
-  `)
+      *,
+      profiles (
+        id,
+        display_name,
+        username,
+        avatar_url
+      ),
+      comment_likes (
+        user_id
+      )
+    `)
       .eq('attempt_id', attemptId)
-
-
-    console.log('FETCH COMMENTS RAW RESULT:', res)
 
     if (res.error) {
       console.error('fetchComments error:', res.error)
       return
     }
 
+    // 🔽 ADD EXACTLY HERE (START)
+    const all = (res.data ?? []).filter(isValidComment)
+
+    const roots = all.filter(c => !c.parent_comment_id)
+    const children = all.filter(c => c.parent_comment_id)
+
+    const grouped = roots.map(root => ({
+      ...root,
+      children: children.filter(ch => ch.parent_comment_id === root.id),
+    }))
+    // 🔼 ADD EXACTLY HERE (END)
+
     setComments(prev => ({
       ...prev,
-      [attemptId]: (res.data ?? []).filter(isValidComment),
+      [attemptId]: grouped,
     }))
   }
 
@@ -1175,9 +1186,6 @@ export default function Home() {
       }
 
       // refresh feed once
-      fetchFeed()
-
-      fetchFeed()
       fetchFeed()
 
     } catch (err: any) {
@@ -1689,6 +1697,7 @@ export default function Home() {
                 )}
             </div>
 
+
             {/* ================= RIGHT COLUMN — COMMENTS ================= */}
 
             {activeProfileAttempt.caption && (
@@ -2127,147 +2136,79 @@ export default function Home() {
                           Attempt correction
                         </button>
                       )}
-
                     {user &&
                       !isGuest &&
                       activeProfileAttempt.user_id === user.id &&
                       c.user_id !== user.id &&
-                      !c.clarification && (
-                        <button
-                          className="underline"
-                          onClick={() => {
-                            if (!requireAuth()) return
-                            setClarifyingCommentId(c.id)
-                            setClarificationDraft('')
-                          }}
-                        >
-                          Ask clarification
-                        </button>
-                      )}
-                    {clarifyingCommentId === c.id && (
-                      <div className="ml-11 mt-2 space-y-1 text-xs">
-                        <input
-                          className="border p-1 w-full"
-                          placeholder="Ask clarification (max 200 chars)"
-                          maxLength={200}
-                          value={clarificationDraft}
-                          onChange={e => setClarificationDraft(e.target.value)}
-                        />
-                        <button
-                          className="underline"
-                          onClick={async () => {
-                            if (!clarificationDraft.trim()) return
-
-                            await supabase
-                              .from('comments')
-                              .update({ clarification: clarificationDraft })
-                              .eq('id', c.id)
-
-                            // 🔔 NOTIFY COMMENT AUTHOR
-                            await supabase.from('notifications').insert({
-                              user_id: c.user_id,
-                              actor_id: user.id,
-                              type: 'clarification_request',
-                              attempt_id: c.attempt_id,
-                              comment_id: c.id,
-                              message: 'User asked for clarification on your suggestion',
-                            })
-
-                            setClarifyingCommentId(null)
-                            setClarificationDraft('')
-                            fetchComments(activeProfileAttempt.id)
-                          }}
-                        >
-                          Submit
-                        </button>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* ================= ROW 3 ================= */}
-                  {/* ================= ROW 3 ================= */}
-                  {c.clarification && (
-                    <div className="ml-11 mt-2 space-y-2 text-xs text-gray-700">
-
-                      {/* USER CLARIFICATION */}
-                      <div className="italic">
-                        Clarification: {c.clarification}
-                      </div>
-
-                      {/* COACH REPLY BUTTON */}
-                      {user &&
-                        !isGuest &&
-                        viewerRole === 'coach' &&
-                        c.user_id === user.id &&
-                        !c.clarified_at && (
-                          <button
-                            className="underline"
-                            onClick={() => {
-                              if (!requireAuth()) return
-                              setReplyingCommentId(c.id)
-                              setReplyDraft('')
-                            }}
-                          >
-                            Reply
-                          </button>
-                        )}
-
-                      {/* COACH REPLY INPUT */}
-                      {replyingCommentId === c.id && !c.clarified_at && (
-                        <div className="space-y-1">
+                      clarifyingCommentId === c.id && (
+                        <div className="ml-11 mt-2 space-y-1 text-xs">
                           <input
                             className="border p-1 w-full"
-                            placeholder="Reply to clarification (max 200 chars)"
+                            placeholder="Ask clarification (max 200 chars)"
                             maxLength={200}
-                            value={replyDraft}
-                            onChange={e => setReplyDraft(e.target.value)}
+                            value={clarificationDraft}
+                            onChange={e => setClarificationDraft(e.target.value)}
                           />
-
                           <button
                             className="underline"
                             onClick={async () => {
-                              if (!replyDraft.trim()) return
+                              if (!clarificationDraft.trim()) return
 
-                              await supabase
-                                .from('comments')
-                                .update({
-                                  suggestion: replyDraft,          // overwrite suggestion
-                                  clarified_by: user.id,
-                                  clarified_at: new Date().toISOString(),
-                                })
-                                .eq('id', c.id)
-                              await supabase.from('notifications').insert({
-                                user_id: activeProfileAttempt.user_id,
-                                actor_id: user.id,
-                                type: 'clarification_reply',
+                              await supabase.from('comments').insert({
+                                user_id: user.id,
                                 attempt_id: c.attempt_id,
-                                comment_id: c.id,
-                                message: 'Coach replied to your clarification request',
+                                parent_comment_id: c.id,
+                                issue: '',
+                                suggestion: clarificationDraft,
+                                second: c.second,
                               })
 
-                              setReplyingCommentId(null)
-                              setReplyDraft('')
+                              await supabase.from('notifications').insert({
+                                user_id: c.user_id,
+                                actor_id: user.id,
+                                type: 'clarification_request',
+                                attempt_id: c.attempt_id,
+                                comment_id: c.id,
+                                message: 'User asked for clarification on your suggestion',
+                              })
+
+                              setClarifyingCommentId(null)
+                              setClarificationDraft('')
                               fetchComments(activeProfileAttempt.id)
                             }}
                           >
-                            Submit reply
+                            Submit
                           </button>
-
-
                         </div>
                       )}
-
-                      {/* FINAL COACH REPLY (READ-ONLY) */}
-                      {c.clarified_at && (
-                        <div className="text-gray-800">
-                          Coach reply: {c.suggestion}
-                        </div>
-                      )}
-                    </div>
-                  )}
+                  </div>
+                  {/* ===== CHILD COMMENTS (CLARIFICATIONS + REPLIES) ===== */}
+{c.children && c.children.length > 0 && (
+  <div className="ml-11 mt-3 space-y-2">
+    {c.children.map(child => (
+      <div
+        key={child.id}
+        className="border-l pl-3 text-xs text-gray-700 italic"
+      >
+        <div className="flex items-center gap-2 mb-1">
+          <span className="font-medium not-italic">
+            {child.profiles?.display_name ||
+              child.profiles?.username ||
+              'User'}
+          </span>
+          <span className="text-gray-400 text-[10px]">
+            {formatIST(child.created_at)}
+          </span>
+        </div>
+        <div>{child.suggestion}</div>
+      </div>
+    ))}
+  </div>
+)}
                 </div>
               ))}
           </div>
+
 
         </div>
       )}

@@ -207,6 +207,18 @@ export default function Home() {
   const [compareAttempts, setCompareAttempts] = useState<Attempt[]>([])
   const [globalPlaybackRate, setGlobalPlaybackRate] = useState(1)
   const filterAppliedTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  // ✅ AUTO-OPEN COMPARE VIEW WHEN 2 ATTEMPTS SELECTED
+useEffect(() => {
+  if (compareAttempts.length === 2) {
+    setOriginalAttempt(compareAttempts[0])        // BEFORE
+    setActiveProfileAttempt(compareAttempts[1])  // AFTER
+    setShowProfile(false)
+
+    // cleanup
+    setCompareSkill(null)
+    setCompareAttempts([])
+  }
+}, [compareAttempts])
 
   /* ---------- UPLOAD STATE (ADDED) ---------- */
   const [uploading, setUploading] = useState(false)

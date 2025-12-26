@@ -149,6 +149,7 @@ export default function Home() {
   // ===== PROFILE META (TEMP / UI ONLY) =====
   const [showProfile, setShowProfile] = useState(false)
   const [viewedUserId, setViewedUserId] = useState<string | null>(null)
+  const [profileRefreshKey, setProfileRefreshKey] = useState(0)
   const profileUserId = user ? (viewedUserId ?? user.id) : null
   const isOwnProfile = profileUserId === user?.id
   const [isFollowing, setIsFollowing] = useState(false)
@@ -442,7 +443,7 @@ export default function Home() {
           fetchSkillDashboard(profileUserId, skills)
         }
       })
-  }, [profileUserId])
+  }, [profileUserId, profileRefreshKey])
   useEffect(() => {
     if (!user || isGuest || !profileUserId || isOwnProfile) return
 
@@ -1144,12 +1145,16 @@ export default function Home() {
       setActiveProfileAttempt(null)
       setShowProfile(true)
 
-      // 🔄 FORCE PROFILE REFRESH
       if (user?.id) {
         setViewedUserId(user.id)
-        fetchProfile(user.id)
-        fetchUserUploads(user.id)
+        setShowProfile(true)
+
+        // 🔄 FORCE PROFILE RELOAD
+        setProfileRefreshKey(k => k + 1)
       }
+
+      // refresh feed once
+      fetchFeed()
 
       fetchFeed()
       fetchFeed()

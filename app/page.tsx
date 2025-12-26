@@ -1396,18 +1396,18 @@ export default function Home() {
         )
 
       if (correctedComment) {
-       const notifRes = await supabase.from('notifications').insert({
-  user_id: correctedComment.user_id,
-  actor_id: user.id,
-  type: 'correction_uploaded',
-  attempt_id: activeProfileAttempt.id,
-  comment_id: correctedComment.id,
-  message: 'User uploaded a correction based on your feedback',
-})
+        const notifRes = await supabase.from('notifications').insert({
+          user_id: correctedComment.user_id,
+          actor_id: user.id,
+          type: 'correction_uploaded',
+          attempt_id: activeProfileAttempt.id,
+          comment_id: correctedComment.id,
+          message: 'User uploaded a correction based on your feedback',
+        })
 
-if (notifRes.error) {
-  console.error('NOTIFICATION INSERT FAILED:', notifRes.error)
-}
+        if (notifRes.error) {
+          console.error('NOTIFICATION INSERT FAILED:', notifRes.error)
+        }
       }
       // 🔹 ADD: +5 impact to comment author
       const comment = comments[activeProfileAttempt.id]?.find(
@@ -1625,7 +1625,7 @@ if (notifRes.error) {
             className={
               previousAttempt
                 ? 'flex flex-col gap-4'
-                : 'grid grid-cols-[2fr_1fr] gap-4'
+                : 'flex flex-col gap-4 md:grid md:grid-cols-[2fr_1fr]'
             }
           >
 
@@ -1660,7 +1660,7 @@ if (notifRes.error) {
                       id="active-video"
                       src={activeProfileAttempt.processed_video_url!}
                       controls
-                      className="w-full max-h-[70vh] rounded bg-black object-contain"
+                      className="w-full max-h-[50vh] md:max-h-[70vh] rounded bg-black object-contain"
                       onLoadedMetadata={e => {
                         const video = e.currentTarget
                         setVideoMeta(prev => ({
@@ -1684,7 +1684,7 @@ if (notifRes.error) {
                   id="active-video"
                   src={activeProfileAttempt.processed_video_url!}
                   controls
-                  className="w-full max-h-[70vh] rounded bg-black object-contain"
+                  className="w-full max-h-[50vh] md:max-h-[70vh] rounded bg-black object-contain"
                   onLoadedMetadata={e => {
                     const video = e.currentTarget
                     setVideoMeta(prev => ({
@@ -1720,7 +1720,7 @@ if (notifRes.error) {
                 {activeProfileAttempt.caption}
               </div>
             )}
-            <div className="border rounded p-3 bg-gray-50 space-y-2">
+            <div className="border rounded p-2 md:p-3 bg-gray-50 space-y-2">
 
               <div className="flex gap-3">
 
@@ -2005,7 +2005,7 @@ if (notifRes.error) {
                       )}
 
                       {/* ACTIONS */}
-                      <div className="flex gap-3 text-xs items-center">
+                      <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs items-center">
 
                         {/* 👍 LIKE */}
                         <button
@@ -2286,8 +2286,10 @@ if (notifRes.error) {
 
         </div>
       )}
-      <header className="sticky top-0 z-20 bg-[#FBF6EC]/90 backdrop-blur border-b border-gray-200 px-6 py-4 flex justify-between">
-        <div className="flex items-center gap-3">
+      <header className="sticky top-0 z-20 bg-[#FBF6EC]/90 backdrop-blur border-b border-gray-200
+px-4 py-2 md:px-6 md:py-4
+flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+        <div className="flex items-center gap-2 md:gap-3">
           <span className="font-semibold text-lg">MUST_Life</span>
           <div
             className="relative group cursor-pointer text-sm hover:text-black transition"
@@ -2309,7 +2311,7 @@ if (notifRes.error) {
             }}
           >
             🏠
-            <span className="absolute -bottom-6 left-1/2 -translate-x-1/2 text-xs border px-2 py-0.5 bg-white hidden group-hover:block">
+            <span className="absolute -bottom-6 left-1/2 -translate-x-1/2 text-xs border px-2 py-0.5 bg-white hidden md:group-hover:block">
               Home
             </span>
           </div>
@@ -2437,7 +2439,7 @@ if (notifRes.error) {
       </header>
       {/* ================= PROFILE PANEL (ADDED) ================= */}
       {showProfile && !activeProfileAttempt && (
-        <div className="max-w-5xl mx-auto px-6 py-6">
+        <div className="max-w-5xl mx-auto px-4 py-4 md:px-6 md:py-6">
           <div className="bg-white border border-gray-200 rounded-2xl p-6 space-y-6">
 
             {/* Profile picture */}
@@ -3222,7 +3224,7 @@ if (notifRes.error) {
                           </>
                         )}
                       </div>
-                      <div className="flex gap-3 flex-wrap mt-2">
+                      <div className="flex gap-2 md:gap-3 flex-wrap mt-2">
                         {(() => {
                           // sort attempts by earliest first for numbering
                           const sorted = [...(vids as any[])].sort(
@@ -3299,7 +3301,7 @@ if (notifRes.error) {
       {
         !showProfile && !activeProfileAttempt && (
           <div className="max-w-5xl mx-auto px-6 pt-6">
-            <div className="bg-white border rounded-xl p-4 flex flex-col gap-2">
+            <div className="bg-white border rounded-xl p-3 md:p-4">
 
               {/* 🔍 SEARCH + FILTER GROUP */}
               <div className="flex flex-col gap-1">
@@ -3536,7 +3538,7 @@ if (notifRes.error) {
 
                   <video
                     src={attempt.processed_video_url!}
-                    className="w-full max-h-[70vh] rounded bg-black object-contain"
+                    className="w-full max-h-[45vh] md:max-h-[70vh] rounded bg-black object-contain"
                     muted
                   />
                 </div>

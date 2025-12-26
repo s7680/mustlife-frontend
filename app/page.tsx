@@ -414,18 +414,18 @@ export default function Home() {
 
   // ===== RESTORE PROFILE VIEW AFTER REFRESH =====
   useEffect(() => {
-  if (!user || authLoading) return
+    if (!user || authLoading) return
 
-  fetchNotifications()   // ✅ ALWAYS fetch once after login
+    fetchNotifications()   // ✅ ALWAYS fetch once after login
 
-  const view = localStorage.getItem('mustlife:view')
-  const pid = localStorage.getItem('mustlife:profileUserId')
+    const view = localStorage.getItem('mustlife:view')
+    const pid = localStorage.getItem('mustlife:profileUserId')
 
-  if (view === 'profile' && pid) {
-    openProfile(pid)
-    fetchUserUploads(pid)
-  }
-}, [user, authLoading])
+    if (view === 'profile' && pid) {
+      openProfile(pid)
+      fetchUserUploads(pid)
+    }
+  }, [user, authLoading])
 
   // 🔹 FETCH PROFILE DATA (avatar + bio)
   useEffect(() => {
@@ -1396,14 +1396,18 @@ export default function Home() {
         )
 
       if (correctedComment) {
-        await supabase.from('notifications').insert({
-          user_id: correctedComment.user_id,
-          actor_id: user.id,
-          type: 'correction_uploaded',
-          attempt_id: activeProfileAttempt.id,
-          comment_id: correctedComment.id,
-          message: 'User uploaded a correction based on your feedback',
-        })
+       const notifRes = await supabase.from('notifications').insert({
+  user_id: correctedComment.user_id,
+  actor_id: user.id,
+  type: 'correction_uploaded',
+  attempt_id: activeProfileAttempt.id,
+  comment_id: correctedComment.id,
+  message: 'User uploaded a correction based on your feedback',
+})
+
+if (notifRes.error) {
+  console.error('NOTIFICATION INSERT FAILED:', notifRes.error)
+}
       }
       // 🔹 ADD: +5 impact to comment author
       const comment = comments[activeProfileAttempt.id]?.find(
@@ -2398,7 +2402,7 @@ export default function Home() {
                       if (attempt) {
                         setActiveProfileAttempt(attempt)
                         setShowProfile(false)
-                        fetchComments(attempt.id) 
+                        fetchComments(attempt.id)
                       }
                     }
                   }}

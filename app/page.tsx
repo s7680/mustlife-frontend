@@ -2171,7 +2171,7 @@ export default function Home() {
                                 user_id: user.id,
                                 attempt_id: c.attempt_id,
                                 parent_comment_id: c.id,
-                                issue: '',
+                                issue: 'CLARIFICATION',
                                 suggestion: clarificationDraft,
                                 second: c.second,
                               })

@@ -211,7 +211,7 @@ export default function Home() {
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [uploadError, setUploadError] = useState<string | null>(null)
-    const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
 
   // ===== PROFILE VIDEO VIEW (ADDED) =====
 
@@ -1139,9 +1139,19 @@ export default function Home() {
       setIncludeCaption(false)
       setAttemptCaption('')
       setSelectedFile(null)
-      setShowProfile(true)
+      setPreviewUrl(null)
+
       setActiveProfileAttempt(null)
-      fetchUserUploads()
+      setShowProfile(true)
+
+      // 🔄 FORCE PROFILE REFRESH
+      if (user?.id) {
+        setViewedUserId(user.id)
+        fetchProfile(user.id)
+        fetchUserUploads(user.id)
+      }
+
+      fetchFeed()
       fetchFeed()
 
     } catch (err: any) {

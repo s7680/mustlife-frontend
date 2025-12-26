@@ -1,6 +1,5 @@
 'use client'
 export const dynamic = 'force-dynamic'
-
 import { useEffect, useState, useRef } from 'react'
 import Image from 'next/image'
 import { supabase } from '../lib/supabase'
@@ -212,6 +211,13 @@ export default function Home() {
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [uploadError, setUploadError] = useState<string | null>(null)
+  // ===== VIDEO TRIM STATE (NEW) =====
+  const videoRef = useRef<HTMLVideoElement | null>(null)
+
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [trimStart, setTrimStart] = useState(0)
+  const [trimEnd, setTrimEnd] = useState<number | null>(null)
+  const [videoDuration, setVideoDuration] = useState(0)
   // ===== PROFILE VIDEO VIEW (ADDED) =====
 
 
@@ -1062,6 +1068,61 @@ export default function Home() {
     }
     return true
   }
+  async function getTrimmedVideo(): Promise<File> {
+    if (!videoRef.current || !selectedFile) {
+      throw new Error('Video not ready')
+    }
+
+    const video = videoRef.current
+
+    // 1️⃣ Create canvas same size as video
+    const canvas = document.createElement('canvas')
+    canvas.width = video.videoWidth
+    canvas.height = video.videoHeight
+    const ctx = canvas.getContext('2d')!
+
+    // 2️⃣ Capture canvas stream (SUPPORTED)
+    const stream = canvas.captureStream()
+    const recorder = new MediaRecorder(stream, {
+      mimeType: 'video/webm',
+    })
+
+    const chunks: BlobPart[] = []
+    recorder.ondataavailable = e => chunks.push(e.data)
+
+    // 3️⃣ Seek video to trimStart
+    video.currentTime = trimStart
+    await new Promise(res => (video.onseeked = () => res(null)))
+
+    recorder.start()
+    video.play()
+
+    // 4️⃣ Draw frames until trimEnd
+    await new Promise<void>(resolve => {
+      const draw = () => {
+        if (video.currentTime >= (trimEnd ?? video.duration)) {
+          video.pause()
+          recorder.stop()
+          resolve()
+          return
+        }
+
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+        requestAnimationFrame(draw)
+      }
+      draw()
+    })
+
+    await new Promise(res => (recorder.onstop = () => res(null)))
+
+    const blob = new Blob(chunks, { type: 'video/webm' })
+
+    return new File(
+      [blob],
+      selectedFile.name.replace(/\.\w+$/, '.webm'),
+      { type: 'video/webm' }
+    )
+  }
   // ===== HANDLE VIDEO UPLOAD (ADDED) =====
   async function handleVideoUpload() {
     if (!requireAuth()) return
@@ -1079,9 +1140,15 @@ export default function Home() {
 
     try {
       // 1️⃣ Upload to Supabase Storage
+      const fileToUpload = previewUrl
+        ? await getTrimmedVideo()
+        : selectedFile
+
+      const filePath = `${user.id}/${Date.now()}-${fileToUpload.name}`
+
       const { error: uploadErr } = await supabase.storage
         .from('raw_videos')
-        .upload(filePath, selectedFile, {
+        .upload(filePath, fileToUpload, {
           cacheControl: '3600',
           upsert: false,
         })
@@ -1994,7 +2061,7 @@ export default function Home() {
                         )}
 
                         {/* SAVE */}
-                       {safeUserId === c.user_id && editingCommentId === c.id && (
+                        {safeUserId === c.user_id && editingCommentId === c.id && (
                           <button
                             className="underline"
                             onClick={async () => {
@@ -2013,9 +2080,9 @@ export default function Home() {
                         )}
 
                         {/* DELETE */}
-                       {safeUserId &&
-  (c.user_id === safeUserId ||
-    activeProfileAttempt.user_id === safeUserId) && (
+                        {safeUserId &&
+                          (c.user_id === safeUserId ||
+                            activeProfileAttempt.user_id === safeUserId) && (
                             <button
                               className="underline text-red-600"
                               onClick={() => deleteComment(c.id)}
@@ -2058,7 +2125,7 @@ export default function Home() {
                   {/* ================= ROW 2 ================= */}
                   <div className="ml-11 mt-2 flex gap-6 text-xs">
                     {safeUserId === activeProfileAttempt.user_id &&
-  !c.corrected_at && (
+                      !c.corrected_at && (
                         <button
                           className="underline"
                           onClick={() =>
@@ -3039,8 +3106,117 @@ export default function Home() {
                       <input
                         type="file"
                         accept="video/*"
-                        onChange={e => setSelectedFile(e.target.files?.[0] || null)}
+                        onChange={e => {
+                          const file = e.target.files?.[0]
+                          if (!file) return
+
+                          setSelectedFile(file)
+                          const url = URL.createObjectURL(file)
+                          setPreviewUrl(url)
+                          setTrimStart(0)
+                          setTrimEnd(null)
+                        }}
                       />
+                      {previewUrl && (
+                        <div className="space-y-2">
+                          <video
+                            ref={videoRef}
+                            src={previewUrl}
+                            controls
+                            className="w-full max-w-[320px] mx-auto rounded bg-black"
+                            onLoadedMetadata={e => {
+                              const d = e.currentTarget.duration
+                              setVideoDuration(d)
+                              setTrimStart(0)
+                              setTrimEnd(d)
+                            }}
+                          />
+
+                          <div className="text-xs text-gray-600">Trim video</div>
+
+                          {/* ===== TRIM SLIDER ===== */}
+                          <div className="mt-3 w-full max-w-[320px] mx-auto">
+                            <div className="relative h-2 bg-gray-300 rounded">
+
+                              {/* LEFT HANDLE */}
+                              <button
+                                className="absolute top-[-6px] w-4 h-4 bg-black rounded-full cursor-pointer"
+                                style={{
+                                  left: `${(trimStart / videoDuration) * 100}%`,
+                                }}
+                                onMouseDown={e => {
+                                  e.preventDefault()
+                                  const startX = e.clientX
+
+                                  const onMove = (ev: MouseEvent) => {
+                                    const dx = ev.clientX - startX
+                                    const delta =
+                                      (dx / 320) * videoDuration   // 320 = slider width
+                                    const next = Math.min(
+                                      Math.max(0, trimStart + delta),
+                                      (trimEnd ?? videoDuration) - 0.1
+                                    )
+
+                                    setTrimStart(next)
+                                    if (videoRef.current) {
+                                      videoRef.current.currentTime = next
+                                    }
+                                  }
+
+                                  const onUp = () => {
+                                    document.removeEventListener('mousemove', onMove)
+                                    document.removeEventListener('mouseup', onUp)
+                                  }
+
+                                  document.addEventListener('mousemove', onMove)
+                                  document.addEventListener('mouseup', onUp)
+                                }}
+                              />
+
+                              {/* RIGHT HANDLE */}
+                              <button
+                                className="absolute top-[-6px] w-4 h-4 bg-black rounded-full cursor-pointer"
+                                style={{
+                                  left: `${((trimEnd ?? videoDuration) / videoDuration) * 100}%`,
+                                }}
+                                onMouseDown={e => {
+                                  e.preventDefault()
+                                  const startX = e.clientX
+
+                                  const onMove = (ev: MouseEvent) => {
+                                    const dx = ev.clientX - startX
+                                    const delta =
+                                      (dx / 320) * videoDuration
+                                    const next = Math.max(
+                                      Math.min(videoDuration, (trimEnd ?? videoDuration) + delta),
+                                      trimStart + 0.1
+                                    )
+
+                                    setTrimEnd(next)
+                                    if (videoRef.current) {
+                                      videoRef.current.currentTime = next
+                                    }
+                                  }
+
+                                  const onUp = () => {
+                                    document.removeEventListener('mousemove', onMove)
+                                    document.removeEventListener('mouseup', onUp)
+                                  }
+
+                                  document.addEventListener('mousemove', onMove)
+                                  document.addEventListener('mouseup', onUp)
+                                }}
+                              />
+                            </div>
+
+                            {/* TIME LABEL */}
+                            <div className="flex justify-between text-[10px] text-gray-600 mt-1">
+                              <span>{trimStart.toFixed(1)}s</span>
+                              <span>{(trimEnd ?? videoDuration).toFixed(1)}s</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}

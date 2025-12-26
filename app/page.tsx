@@ -225,12 +225,7 @@ export default function Home() {
 
 
   /* 🔹 AUTO-FETCH COMMENTS WHEN A VIDEO OPENS */
-  useEffect(() => {
-    if (compareAttempts.length === 2) {
-      const ids = compareAttempts.map(a => a.id).join(',')
-      window.location.href = '/issues'
-    }
-  }, [compareAttempts])
+
   useEffect(() => {
     if (!activeProfileAttempt) return
     fetchComments(activeProfileAttempt.id)

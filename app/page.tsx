@@ -208,17 +208,19 @@ export default function Home() {
   const [globalPlaybackRate, setGlobalPlaybackRate] = useState(1)
   const filterAppliedTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   // ✅ AUTO-OPEN COMPARE VIEW WHEN 2 ATTEMPTS SELECTED
-useEffect(() => {
-  if (compareAttempts.length === 2) {
-    setOriginalAttempt(compareAttempts[0])        // BEFORE
-    setActiveProfileAttempt(compareAttempts[1])  // AFTER
-    setShowProfile(false)
+  useEffect(() => {
+    if (compareAttempts.length === 2) {
+      const a = compareAttempts[0].id
+      const b = compareAttempts[1].id
 
-    // cleanup
-    setCompareSkill(null)
-    setCompareAttempts([])
-  }
-}, [compareAttempts])
+      // 🔁 redirect to compare page
+      window.location.href = `/compare?a=${a}&b=${b}`
+
+      // cleanup
+      setCompareSkill(null)
+      setCompareAttempts([])
+    }
+  }, [compareAttempts])
 
   /* ---------- UPLOAD STATE (ADDED) ---------- */
   const [uploading, setUploading] = useState(false)
@@ -232,10 +234,14 @@ useEffect(() => {
 
   const [activeProfileAttempt, setActiveProfileAttempt] = useState<Attempt | null>(null)
 
-  // ===== PROFILE STATE (ADDED) =====
 
 
 
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl)
+    }
+  }, [previewUrl])
   /* 🔹 AUTO-FETCH COMMENTS WHEN A VIDEO OPENS */
 
   useEffect(() => {
@@ -1574,6 +1580,23 @@ useEffect(() => {
     <main className="min-h-screen bg-[#FBF6EC] text-black [&_button]:cursor-pointer">
       {activeProfileAttempt && !showProfile && (
         <div className="max-w-6xl mx-auto p-6 space-y-4">
+
+          {/* ===== BACK BAR ===== */}
+          <div className="sticky top-0 z-10 bg-[#FBF6EC] py-2">
+            <button
+              className="text-sm underline"
+              onClick={() => {
+                setActiveProfileAttempt(null)
+
+                // if user came from profile, go back to profile
+                if (showProfile === false && viewedUserId) {
+                  setShowProfile(true)
+                }
+              }}
+            >
+              ← Back
+            </button>
+          </div>
 
           <div
             className={
@@ -3084,7 +3107,8 @@ useEffect(() => {
                           if (!file) return
 
                           setSelectedFile(file)
-                          setPreviewUrl(URL.createObjectURL(file))
+                          const url = URL.createObjectURL(file)
+                          setPreviewUrl(url)
                         }}
                       />
                       {previewUrl && (

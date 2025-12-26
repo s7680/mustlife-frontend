@@ -2091,6 +2091,19 @@ export default function Home() {
                               Delete
                             </button>
                           )}
+                        {/* ASK CLARIFICATION */}
+                        {safeUserId === activeProfileAttempt.user_id &&
+                          c.user_id !== safeUserId && (
+                            <button
+                              className="underline text-xs"
+                              onClick={() => {
+                                setClarifyingCommentId(c.id)
+                                setClarificationDraft('')
+                              }}
+                            >
+                              Ask clarification
+                            </button>
+                          )}
                       </div>
                     </div>
                   </div>
@@ -2183,28 +2196,28 @@ export default function Home() {
                       )}
                   </div>
                   {/* ===== CHILD COMMENTS (CLARIFICATIONS + REPLIES) ===== */}
-{c.children && c.children.length > 0 && (
-  <div className="ml-11 mt-3 space-y-2">
-    {c.children.map(child => (
-      <div
-        key={child.id}
-        className="border-l pl-3 text-xs text-gray-700 italic"
-      >
-        <div className="flex items-center gap-2 mb-1">
-          <span className="font-medium not-italic">
-            {child.profiles?.display_name ||
-              child.profiles?.username ||
-              'User'}
-          </span>
-          <span className="text-gray-400 text-[10px]">
-            {formatIST(child.created_at)}
-          </span>
-        </div>
-        <div>{child.suggestion}</div>
-      </div>
-    ))}
-  </div>
-)}
+                  {c.children && c.children.length > 0 && (
+                    <div className="ml-11 mt-3 space-y-2">
+                      {c.children.map(child => (
+                        <div
+                          key={child.id}
+                          className="border-l pl-3 text-xs text-gray-700 italic"
+                        >
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="font-medium not-italic">
+                              {child.profiles?.display_name ||
+                                child.profiles?.username ||
+                                'User'}
+                            </span>
+                            <span className="text-gray-400 text-[10px]">
+                              {formatIST(child.created_at)}
+                            </span>
+                          </div>
+                          <div>{child.suggestion}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ))}
           </div>

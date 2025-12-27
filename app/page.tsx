@@ -3181,7 +3181,7 @@ flex flex-row items-center justify-between gap-3">
                 <div key={community}>
                   <div className="text-lg font-bold mt-4">{community}</div>
 
-                  {Object.entries(skills as any).map(([skill, vids]) => (
+                 {Object.entries(skillGroups as Record<string, any[]>).map(([skill, vids]) => (
                     <div key={skill} className="ml-4">
                       <div className="mt-2 space-y-1">
                         <div className="text-sm font-semibold text-gray-700">

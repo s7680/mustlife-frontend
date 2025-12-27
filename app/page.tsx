@@ -210,19 +210,15 @@ export default function Home() {
   const [globalPlaybackRate, setGlobalPlaybackRate] = useState(1)
   const filterAppliedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   // ✅ AUTO-OPEN COMPARE VIEW WHEN 2 ATTEMPTS SELECTED
-  useEffect(() => {
-    if (compareAttempts.length === 2) {
-      const a = compareAttempts[0].id
-      const b = compareAttempts[1].id
+ useEffect(() => {
+  if (compareAttempts.length === 2) {
+    const [a, b] = compareAttempts
 
-      // 🔁 redirect to compare page
-      window.location.href = `/compare?ids=${a},${b}`
-
-      // cleanup
-      setCompareSkill(null)
-      setCompareAttempts([])
-    }
-  }, [compareAttempts])
+    setTimeout(() => {
+      window.location.href = `/compare?ids=${a.id},${b.id}`
+    }, 0)
+  }
+}, [compareAttempts])
 
   /* ---------- UPLOAD STATE (ADDED) ---------- */
   const [uploading, setUploading] = useState(false)
@@ -3203,7 +3199,8 @@ flex flex-row items-center justify-between gap-3">
                                       setCompareSkill(null)
                                       setCompareAttempts([])
                                     } else {
-                                      setCompareSkill(skill)
+                                      const skillId = skills.find(s => s.name === skill)?.id ?? null
+setCompareSkill(skillId)
                                       setCompareAttempts([])
                                     }
                                   }}
@@ -3244,7 +3241,7 @@ flex flex-row items-center justify-between gap-3">
                                     )
                                     if (!attempt) return
 
-                                    if (compareSkill === skill) {
+                                    if (compareSkill === skills.find(s => s.name === skill)?.id) {
                                       setCompareAttempts(prev => {
                                         if (prev.find(a => a.id === attempt.id)) return prev
                                         if (prev.length === 2) return prev

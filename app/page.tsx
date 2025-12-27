@@ -3214,12 +3214,13 @@ flex flex-row items-center justify-between gap-3">
                       <div className="flex gap-2 md:gap-3 flex-wrap mt-2">
                         {(() => {
                           // sort attempts by earliest first for numbering
-                          const sorted = [...(vids as any[])].sort(
-                            (a, b) =>
-                              Date.parse(a.created_at) -
-                              Date.parse(b.created_at)
-                          )
-
+                          const sorted = Array.isArray(vids)
+                            ? [...vids].sort(
+                              (a, b) =>
+                                Date.parse(a.created_at) -
+                                Date.parse(b.created_at)
+                            )
+                            : []
                           return sorted.map((v, index) => (
                             <div
                               key={v.url}

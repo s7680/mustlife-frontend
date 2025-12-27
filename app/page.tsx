@@ -1885,7 +1885,9 @@ export default function Home() {
                           setComments(prev => ({
                             ...prev,
                             [activeProfileAttempt.id]: [
-                              ...(prev[activeProfileAttempt.id] ?? []),
+                              ...(Array.isArray(prev[activeProfileAttempt.id])
+                                ? prev[activeProfileAttempt.id]
+                                : []),
                               { ...newComment, profiles: newComment.profiles ?? null },
                             ],
                           }))
